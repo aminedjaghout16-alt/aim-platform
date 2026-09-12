@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="obsidian">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AIMFORGE — Precision Training System</title>
+  <meta name="description" content="AIMFORGE is a precision aim-training system for Valorant, CS2, and competitive FPS." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="./src/styles/theme.css" />
+  <link rel="stylesheet" href="./src/styles/global.css" />
+  <link rel="stylesheet" href="./src/styles/layout.css" />
+  <link rel="stylesheet" href="./src/styles/components.css" />
+  <link rel="stylesheet" href="./src/styles/pages.css" />
+</head>
+<body>
+  <!-- Ambient background layers (grid + scanlines + grain) -->
+  <div class="af-bg" aria-hidden="true">
+    <div class="af-bg__grid"></div>
+    <div class="af-bg__glow"></div>
+    <div class="af-bg__scan"></div>
+    <div class="af-bg__grain"></div>
+  </div>
+
+  <!-- Application shell — the router mounts a layout inside #app -->
+  <div id="app" class="af-app"></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
