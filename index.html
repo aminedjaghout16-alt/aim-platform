@@ -1,36 +1,55 @@
-<!doctype html>
-<html lang="en" data-theme="obsidian">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>AIMFORGE — Precision Training System</title>
-  <meta name="description" content="AIMFORGE is a precision aim-training system for Valorant, CS2, and competitive FPS." />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VANTAGE — Precision Aim Training</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>▽</text></svg>">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600&display=swap"
-    rel="stylesheet"
-  />
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/components.css">
 
-  <link rel="stylesheet" href="./src/styles/theme.css" />
-  <link rel="stylesheet" href="./src/styles/global.css" />
-  <link rel="stylesheet" href="./src/styles/layout.css" />
-  <link rel="stylesheet" href="./src/styles/components.css" />
-  <link rel="stylesheet" href="./src/styles/pages.css" />
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 </head>
 <body>
-  <!-- Ambient background layers (grid + scanlines + grain) -->
-  <div class="af-bg" aria-hidden="true">
-    <div class="af-bg__grid"></div>
-    <div class="af-bg__glow"></div>
-    <div class="af-bg__scan"></div>
-    <div class="af-bg__grain"></div>
-  </div>
+  <div id="root"></div>
 
-  <!-- Application shell — the router mounts a layout inside #app -->
-  <div id="app" class="af-app"></div>
+  <!-- Services -->
+  <script src="js/services/authService.js"></script>
+  <script src="js/services/databaseService.js"></script>
+  <script src="js/services/storageService.js"></script>
 
-  <script type="module" src="./src/main.js"></script>
+  <!-- Engine -->
+  <script src="js/engine/categories.js"></script>
+  <script src="js/engine/settings.js"></script>
+  <script src="js/engine/scoring.js"></script>
+  <script src="js/engine/scenarios.js"></script>
+  <script src="js/engine/renderers.js"></script>
+  <script src="js/engine/renderers/gridShotRenderer.js"></script>
+  <script src="js/engine/trainingEngine.js"></script>
+
+  <!-- UI Components -->
+  <script src="js/components/ui.js"></script>
+  <script src="js/components/Layout.js"></script>
+
+  <!-- Pages -->
+  <script src="js/pages/Landing.js"></script>
+  <script src="js/pages/Dashboard.js"></script>
+  <script src="js/pages/TrainingLibrary.js"></script>
+  <script src="js/pages/TrainingDetails.js"></script>
+  <script src="js/pages/TrainingSetup.js"></script>
+  <script src="js/pages/TrainingGameplay.js"></script>
+  <script src="js/pages/Results.js"></script>
+  <script src="js/pages/Statistics.js"></script>
+  <script src="js/pages/Profile.js"></script>
+  <script src="js/pages/Settings.js"></script>
+  <script src="js/pages/Login.js"></script>
+  <script src="js/pages/Register.js"></script>
+
+  <!-- App -->
+  <script src="js/app.js"></script>
 </body>
 </html>
