@@ -31,7 +31,7 @@ VantageEngine.Scenarios = {
         targetSize: 'Start with Medium, decrease as you improve',
         duration: '60s rounds for consistency tracking',
       },
-      renderer: 'GridShotRenderer',
+      renderer: 'ThreeArenaRenderer',
       enabled: true,
     },
     {

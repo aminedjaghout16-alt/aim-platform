@@ -9,6 +9,15 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const [engineState, setEngineState] = useState('idle');
   const [tickData, setTickData] = useState(null);
   const [result, setResult] = useState(null);
+  const [pointerLocked, setPointerLocked] = useState(false);
+
+  useEffect(() => {
+    const onPLChange = () => {
+      setPointerLocked(!!document.pointerLockElement);
+    };
+    document.addEventListener('pointerlockchange', onPLChange);
+    return () => document.removeEventListener('pointerlockchange', onPLChange);
+  }, []);
 
   useEffect(() => {
     const engine = new VantageEngine.TrainingEngine();
@@ -54,6 +63,11 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const handleContinue = () => {
     if (result) onFinish(result);
   };
+
+  // Compute live accuracy
+  const sd = tickData?.sessionData;
+  const totalShots = (sd?.hits || 0) + (sd?.misses || 0);
+  const accuracy = totalShots > 0 ? Math.round(((sd?.hits || 0) / totalShots) * 100) : 0;
 
   // Results screen
   if (engineState === 'finished' && result) {
@@ -118,9 +132,13 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       e('div', { className: 'vhud-right' },
         e('div', { className: 'vhud-stats' },
           e('span', { className: 'vhud-stat' },
-            e('span', { className: 'text-accent' }, tickData?.sessionData?.hits || 0), ' hits'),
+            e('span', { className: 'text-accent' }, sd?.hits || 0), ' hits'),
           e('span', { className: 'vhud-stat' },
-            e('span', { className: 'text-error' }, tickData?.sessionData?.misses || 0), ' miss'),
+            e('span', { className: 'text-error' }, sd?.misses || 0), ' miss'),
+          e('span', { className: 'vhud-stat' },
+            e('span', { className: 'text-warning' }, accuracy + '%'), ' acc'),
+          e('span', { className: 'vhud-stat' },
+            e('span', {}, totalShots), ' shots'),
         ),
         e('div', { className: 'vhud-controls' },
           (engineState === 'running' || engineState === 'paused') &&
@@ -131,9 +149,23 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       ),
     ),
 
-    // Canvas
+    // Canvas wrapper with crosshair
     e('div', { className: 'vgameplay-canvas-wrapper' },
       e('canvas', { ref: canvasRef, className: 'vgameplay-canvas' }),
+      // Crosshair overlay
+      engineState === 'running' && pointerLocked && e('div', { className: 'vcrosshair-overlay' },
+        e('div', { className: 'vcrosshair' },
+          e('div', { className: 'vcrosshair-dot' }),
+          e('div', { className: 'vcrosshair-line vcrosshair-top' }),
+          e('div', { className: 'vcrosshair-line vcrosshair-bottom' }),
+          e('div', { className: 'vcrosshair-line vcrosshair-left' }),
+          e('div', { className: 'vcrosshair-line vcrosshair-right' }),
+        ),
+      ),
+      // Click-to-start prompt
+      engineState === 'running' && !pointerLocked && e('div', { className: 'vclick-prompt' },
+        e('span', null, 'CLICK TO AIM'),
+      ),
     ),
   );
 };
