@@ -73,6 +73,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     this._hitCount = 0;
     this._sessionStartTime = Date.now();
     this._lastTargetPos = null;
+    this._recentPositions = [];
+    this._spawnPending = false;
     this._spawnTarget();
     this._loop();
   }
@@ -80,6 +82,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   pause() {
     this.running = false;
     clearTimeout(this._spawnTimer);
+    this._spawnPending = false;
     // Release pointer lock so user can interact with HUD
     if (document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
@@ -91,8 +94,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   resume() {
     this._stopIdleLoop();
     this.running = true;
-    // Adjust session start time to account for pause duration
-    // (session tracking continues from where it left off)
+    this._spawnPending = false;
     // Player must click canvas again to re-lock pointer
     this._spawnTarget();
     this._loop();
@@ -100,6 +102,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
   stop() {
     this.running = false;
+    this._spawnPending = false;
     clearTimeout(this._spawnTimer);
     cancelAnimationFrame(this._animFrame);
     this._animFrame = null;
@@ -408,61 +411,125 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
   /* ---------- Target Management ---------- */
 
+  // Arena bounds (walls at ±20, keep targets 2 units inside)
+  static ARENA_HALF = 18;
+  static ARENA_MIN_Y = 0.4;
+  static ARENA_MAX_Y = 4.5;
+
   // Calculate difficulty progression based on session progress
   _getDifficultyFactor() {
     const elapsed = (Date.now() - this._sessionStartTime) / 1000;
-    const hitProgress = Math.min(this._hitCount / 30, 1); // Max effect at 30 hits
-    const timeProgress = Math.min(elapsed / 60, 1); // Max effect at 60 seconds
-    return Math.max(hitProgress, timeProgress);
+    // Smooth ramp: hits count more early, time catches up later
+    const hitProgress = Math.min(this._hitCount / 40, 1);
+    const timeProgress = Math.min(elapsed / 90, 1);
+    // Blend: early session favors hit count, later session favors time
+    return Math.min(1, hitProgress * 0.6 + timeProgress * 0.4);
   }
 
-  // Generate a natural target position with zone-based spawning
+  // Get the player's current look direction as a world-space angle (yaw)
+  _getPlayerLookYaw() {
+    return this._yaw;
+  }
+
+  // Generate a natural target position with FOV-aware zone-based spawning
   _generateTargetPosition() {
     const difficulty = this._getDifficultyFactor();
+    const playerYaw = this._getPlayerLookYaw();
+
+    // Minimum angular offset from crosshair (radians) — forces a real flick
+    // Starts at ~25 degrees, increases slightly with difficulty
+    const minFlickAngle = 0.44 + difficulty * 0.1; // 25° → 32°
+
+    // Maximum angular offset — keep within comfortable FOV (~55° from center)
+    // Increases slightly with difficulty to use more of the screen
+    const maxFlickAngle = 0.95 + difficulty * 0.15; // 54° → 63°
 
     // Define spawn zones with weights
-    // Zone 1: Close range (5-8m) - easier, good for warmup
-    // Zone 2: Mid range (8-12m) - standard
-    // Zone 3: Far range (12-16m) - challenging
-    // Zone 4: Extreme angles (sides) - advanced
-
     const zones = [
-      { minDist: 5, maxDist: 8, angleRange: 0.6, weight: 0.3 - difficulty * 0.1 }, // Close
-      { minDist: 8, maxDist: 12, angleRange: 0.8, weight: 0.4 }, // Mid
-      { minDist: 12, maxDist: 16, angleRange: 0.9, weight: 0.2 + difficulty * 0.1 }, // Far
-      { minDist: 6, maxDist: 14, angleRange: 1.2, weight: 0.1 + difficulty * 0.1 }, // Wide angles
+      { minDist: 5, maxDist: 8, weight: 0.30 - difficulty * 0.10 }, // Close
+      { minDist: 8, maxDist: 12, weight: 0.40 },                     // Mid
+      { minDist: 12, maxDist: 16, weight: 0.20 + difficulty * 0.10 }, // Far
     ];
 
-    // Normalize weights
-    const totalWeight = zones.reduce((sum, z) => sum + z.weight, 0);
+    // Normalize weights and select zone
+    const totalWeight = zones.reduce((sum, z) => sum + Math.max(0.05, z.weight), 0);
     let rand = Math.random() * totalWeight;
     let selectedZone = zones[0];
     for (const zone of zones) {
-      rand -= zone.weight;
+      rand -= Math.max(0.05, zone.weight);
       if (rand <= 0) {
         selectedZone = zone;
         break;
       }
     }
 
-    // Calculate distance within zone
     const distance = selectedZone.minDist + Math.random() * (selectedZone.maxDist - selectedZone.minDist);
 
-    // Calculate angle - avoid spawning too close to last position
-    let angle;
-    let attempts = 0;
-    do {
-      angle = (Math.random() - 0.5) * Math.PI * selectedZone.angleRange;
-      attempts++;
-    } while (this._lastTargetPos && attempts < 5 && this._isTooClose(angle, distance));
+    // Pick angle relative to player look direction, enforcing minimum flick
+    let bestAngle = null;
+    const maxAttempts = 20;
 
-    // Height distribution - natural with more at eye level
-    // Use weighted random for more realistic distribution
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Random offset from player's look direction
+      const sign = Math.random() < 0.5 ? -1 : 1;
+      const flickOffset = minFlickAngle + Math.random() * (maxFlickAngle - minFlickAngle);
+      const candidateAngle = playerYaw + sign * flickOffset;
+
+      // Compute candidate position
+      const cx = Math.sin(candidateAngle) * distance;
+      const cz = -Math.cos(candidateAngle) * distance;
+
+      // Check arena bounds
+      if (Math.abs(cx) > ThreeArenaRenderer.ARENA_HALF || Math.abs(cz) > ThreeArenaRenderer.ARENA_HALF) {
+        continue; // Out of bounds, try again
+      }
+
+      // Check minimum distance from last target
+      if (this._lastTargetPos) {
+        const dx = cx - this._lastTargetPos.x;
+        const dz = cz - this._lastTargetPos.z;
+        const sep = Math.sqrt(dx * dx + dz * dz);
+        if (sep < 2.5) continue; // Too close to last target
+      }
+
+      // Check minimum separation from all recent target positions
+      if (this._recentPositions) {
+        let tooCloseToRecent = false;
+        for (const rp of this._recentPositions) {
+          const dx = cx - rp.x;
+          const dz = cz - rp.z;
+          if (Math.sqrt(dx * dx + dz * dz) < 2.0) {
+            tooCloseToRecent = true;
+            break;
+          }
+        }
+        if (tooCloseToRecent) continue;
+      }
+
+      bestAngle = candidateAngle;
+      break;
+    }
+
+    // Fallback: if no valid angle found after all attempts, pick any valid angle
+    if (bestAngle === null) {
+      for (let a = 0; a < Math.PI * 2; a += 0.3) {
+        const cx = Math.sin(playerYaw + a) * distance;
+        const cz = -Math.cos(playerYaw + a) * distance;
+        if (Math.abs(cx) <= ThreeArenaRenderer.ARENA_HALF && Math.abs(cz) <= ThreeArenaRenderer.ARENA_HALF) {
+          bestAngle = playerYaw + a;
+          break;
+        }
+      }
+      // Ultimate fallback
+      if (bestAngle === null) bestAngle = playerYaw + 0.8;
+    }
+
+    // Height distribution — weighted toward eye level
     const heightZones = [
-      { min: 0.5, max: 1.2, weight: 0.2 }, // Low
-      { min: 1.2, max: 2.2, weight: 0.5 }, // Eye level (most common)
-      { min: 2.2, max: 3.0, weight: 0.2 }, // High
-      { min: 3.0, max: 3.8, weight: 0.1 }, // Very high
+      { min: 0.5, max: 1.2, weight: 0.15 }, // Low
+      { min: 1.2, max: 2.2, weight: 0.50 }, // Eye level
+      { min: 2.2, max: 3.0, weight: 0.25 }, // High
+      { min: 3.0, max: 4.0, weight: 0.10 }, // Very high
     ];
 
     const totalHeightWeight = heightZones.reduce((sum, z) => sum + z.weight, 0);
@@ -478,30 +545,38 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
     const height = selectedHeightZone.min + Math.random() * (selectedHeightZone.max - selectedHeightZone.min);
 
-    const x = Math.sin(angle) * distance;
-    const z = -Math.cos(angle) * distance;
+    const x = Math.sin(bestAngle) * distance;
+    const z = -Math.cos(bestAngle) * distance;
 
-    return { x, y: height, z, distance, angle };
-  }
+    // Final clamp to arena bounds (safety net)
+    const clampedX = Math.max(-ThreeArenaRenderer.ARENA_HALF, Math.min(ThreeArenaRenderer.ARENA_HALF, x));
+    const clampedZ = Math.max(-ThreeArenaRenderer.ARENA_HALF, Math.min(ThreeArenaRenderer.ARENA_HALF, z));
+    const clampedY = Math.max(ThreeArenaRenderer.ARENA_MIN_Y, Math.min(ThreeArenaRenderer.ARENA_MAX_Y, height));
 
-  // Check if new position is too close to last target
-  _isTooClose(angle, distance) {
-    if (!this._lastTargetPos) return false;
-    const dx = Math.sin(angle) * distance - this._lastTargetPos.x;
-    const dz = -Math.cos(angle) * distance - this._lastTargetPos.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    return dist < 3; // Minimum 3 units between targets
+    return { x: clampedX, y: clampedY, z: clampedZ, distance, angle: bestAngle };
   }
 
   _spawnTarget() {
     if (!this.running) return;
 
-    // Remove any existing alive targets
+    // Guard: don't spawn if there's already an alive target
+    const aliveCount = this._targets.filter(t => t.alive).length;
+    if (aliveCount > 0) return;
+
+    // Remove any existing alive targets (should be none due to guard above)
     this._clearAliveTargets();
 
     // Generate natural position
     const pos = this._generateTargetPosition();
     this._lastTargetPos = { x: pos.x, z: pos.z };
+
+    // Track recent positions for variety
+    if (!this._recentPositions) this._recentPositions = [];
+    this._recentPositions.push({ x: pos.x, z: pos.z });
+    if (this._recentPositions.length > 5) this._recentPositions.shift();
+
+    // Mark that we have a pending spawn resolved
+    this._spawnPending = false;
 
     const radius = this.targetBaseRadius;
 
@@ -710,7 +785,11 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
         const minDelay = 80;
         const difficulty = this._getDifficultyFactor();
         const spawnDelay = baseDelay - (baseDelay - minDelay) * difficulty;
-        this._spawnTimer = setTimeout(() => this._spawnTarget(), spawnDelay);
+        this._spawnPending = true;
+        this._spawnTimer = setTimeout(() => {
+          this._spawnPending = false;
+          this._spawnTarget();
+        }, spawnDelay);
       }
     }
 
@@ -808,6 +887,15 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
     // Update particles
     this._updateParticles(dt);
+
+    // Safety net: ensure there's always an alive target during gameplay
+    // If no alive target and no spawn pending, spawn one immediately
+    if (this.running && !this._spawnPending) {
+      const aliveCount = this._targets.filter(t => t.alive).length;
+      if (aliveCount === 0) {
+        this._spawnTarget();
+      }
+    }
 
     // Collect dead targets to remove (avoid mutating array during iteration)
     const toRemove = [];
