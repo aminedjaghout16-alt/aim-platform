@@ -28,6 +28,14 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     this._clock = null;
     this._initialized = false;
 
+    // Session tracking for difficulty progression
+    this._hitCount = 0;
+    this._sessionStartTime = 0;
+    this._lastTargetPos = null;
+
+    // Particle system for hit effects
+    this._particles = [];
+
     // Three.js objects
     this._scene = null;
     this._camera = null;
@@ -62,6 +70,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   start(sessionData) {
     this._stopIdleLoop();
     this.running = true;
+    this._hitCount = 0;
+    this._sessionStartTime = Date.now();
+    this._lastTargetPos = null;
     this._spawnTarget();
     this._loop();
   }
@@ -80,6 +91,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   resume() {
     this._stopIdleLoop();
     this.running = true;
+    // Adjust session start time to account for pause duration
+    // (session tracking continues from where it left off)
     // Player must click canvas again to re-lock pointer
     this._spawnTarget();
     this._loop();
@@ -92,6 +105,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     this._animFrame = null;
     this._unbindEvents();
     this._clearTargets();
+    this._clearParticles();
 
     if (this._renderer3d) {
       this._renderer3d.dispose();
@@ -110,6 +124,15 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     this._camera = null;
     this._renderer3d = null;
     this._initialized = false;
+  }
+
+  _clearParticles() {
+    for (const p of this._particles) {
+      if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      p.mesh.material.dispose();
+    }
+    this._particles = [];
   }
 
   setCallbacks({ onHit, onMiss }) {
@@ -155,27 +178,42 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   _buildArena() {
     const arena = this._arenaGroup;
 
-    // --- Floor ---
-    const floorGeo = new THREE.PlaneGeometry(40, 40);
+    // --- Floor with subtle gradient ---
+    const floorGeo = new THREE.PlaneGeometry(40, 40, 20, 20);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x0e1018,
-      roughness: 0.85,
-      metalness: 0.15,
+      roughness: 0.75,
+      metalness: 0.25,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     arena.add(floor);
 
-    // Floor grid
-    const gridHelper = new THREE.GridHelper(40, 40, 0x1a1d2e, 0x12141e);
+    // Floor grid with better visibility
+    const gridHelper = new THREE.GridHelper(40, 40, 0x1e2238, 0x141722);
     gridHelper.position.y = 0.01;
+    gridHelper.material.opacity = 0.4;
+    gridHelper.material.transparent = true;
     arena.add(gridHelper);
 
-    // --- Walls ---
+    // Inner arena zone marker (subtle)
+    const innerZoneGeo = new THREE.RingGeometry(8, 8.1, 64);
+    const innerZoneMat = new THREE.MeshBasicMaterial({
+      color: 0x00e0d0,
+      transparent: true,
+      opacity: 0.08,
+      side: THREE.DoubleSide,
+    });
+    const innerZone = new THREE.Mesh(innerZoneGeo, innerZoneMat);
+    innerZone.rotation.x = -Math.PI / 2;
+    innerZone.position.y = 0.02;
+    arena.add(innerZone);
+
+    // --- Walls with subtle panel lines ---
     const wallMat = new THREE.MeshStandardMaterial({
       color: 0x10131c,
-      roughness: 0.9,
-      metalness: 0.1,
+      roughness: 0.85,
+      metalness: 0.15,
     });
     const wallH = 6;
     const half = 20;
@@ -191,6 +229,25 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       wall.position.set(...cfg.pos);
       wall.rotation.y = cfg.ry;
       arena.add(wall);
+
+      // Wall panel accent lines
+      const panelLineMat = new THREE.MeshBasicMaterial({
+        color: 0x1a1d2e,
+        transparent: true,
+        opacity: 0.3,
+      });
+      for (let i = -15; i <= 15; i += 10) {
+        const lineGeo = new THREE.PlaneGeometry(0.02, wallH);
+        const line = new THREE.Mesh(lineGeo, panelLineMat);
+        if (cfg.ry === 0 || Math.abs(cfg.ry) === Math.PI) {
+          line.position.set(i, wallH / 2, cfg.pos[2] + (cfg.ry === 0 ? 0.01 : -0.01));
+          line.rotation.y = cfg.ry;
+        } else {
+          line.position.set(cfg.pos[0] + (cfg.ry > 0 ? 0.01 : -0.01), wallH / 2, i);
+          line.rotation.y = cfg.ry;
+        }
+        arena.add(line);
+      }
     }
 
     // --- Ceiling ---
@@ -200,9 +257,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     ceiling.position.y = wallH;
     arena.add(ceiling);
 
-    // --- Accent trim lines ---
-    const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.18 });
-    const trimGeo = new THREE.PlaneGeometry(40, 0.04);
+    // --- Accent trim lines (improved) ---
+    const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.25 });
+    const trimGeo = new THREE.PlaneGeometry(40, 0.05);
     const trimPositions = [
       { pos: [0, 1.0, -half + 0.02], ry: 0 },
       { pos: [0, 1.0, half - 0.02], ry: Math.PI },
@@ -215,7 +272,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     }
 
     // Side trims
-    const sideTrimGeo = new THREE.PlaneGeometry(40, 0.04);
+    const sideTrimGeo = new THREE.PlaneGeometry(40, 0.05);
     const sideTrims = [
       { pos: [-half + 0.02, 1.0, 0], ry: Math.PI / 2 },
       { pos: [half - 0.02, 1.0, 0], ry: -Math.PI / 2 },
@@ -227,34 +284,64 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       arena.add(trim);
     }
 
-    // --- Lighting ---
-    const ambient = new THREE.AmbientLight(0x404860, 0.7);
+    // Upper trim lines
+    const upperTrimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.12 });
+    const upperTrimGeo = new THREE.PlaneGeometry(40, 0.03);
+    const upperTrims = [
+      { pos: [0, wallH - 0.5, -half + 0.02], ry: 0 },
+      { pos: [0, wallH - 0.5, half - 0.02], ry: Math.PI },
+      { pos: [-half + 0.02, wallH - 0.5, 0], ry: Math.PI / 2 },
+      { pos: [half - 0.02, wallH - 0.5, 0], ry: -Math.PI / 2 },
+    ];
+    for (const ut of upperTrims) {
+      const trim = new THREE.Mesh(upperTrimGeo, upperTrimMat);
+      trim.position.set(...ut.pos);
+      trim.rotation.y = ut.ry;
+      arena.add(trim);
+    }
+
+    // --- Lighting (improved) ---
+    const ambient = new THREE.AmbientLight(0x404860, 0.8);
     this._scene.add(ambient);
 
-    const mainLight = new THREE.DirectionalLight(0xd0e8ff, 1.0);
+    const mainLight = new THREE.DirectionalLight(0xd0e8ff, 1.1);
     mainLight.position.set(2, 8, 3);
     this._scene.add(mainLight);
 
-    // Teal accent lights
-    const accent1 = new THREE.PointLight(0x00e0d0, 0.7, 30);
+    // Teal accent lights (brighter)
+    const accent1 = new THREE.PointLight(0x00e0d0, 0.9, 35);
     accent1.position.set(-10, 3.5, -10);
     this._scene.add(accent1);
 
-    const accent2 = new THREE.PointLight(0x00e0d0, 0.5, 30);
+    const accent2 = new THREE.PointLight(0x00e0d0, 0.7, 35);
     accent2.position.set(10, 3.5, 10);
     this._scene.add(accent2);
 
-    // Warm fill
-    const fill = new THREE.PointLight(0xffb830, 0.25, 35);
+    // Additional corner accents
+    const accent3 = new THREE.PointLight(0x00e0d0, 0.4, 25);
+    accent3.position.set(-10, 2, 10);
+    this._scene.add(accent3);
+
+    const accent4 = new THREE.PointLight(0x00e0d0, 0.4, 25);
+    accent4.position.set(10, 2, -10);
+    this._scene.add(accent4);
+
+    // Warm fill (improved)
+    const fill = new THREE.PointLight(0xffb830, 0.3, 40);
     fill.position.set(0, 4, -15);
     this._scene.add(fill);
 
-    // --- Decorative pillars ---
-    const pillarGeo = new THREE.BoxGeometry(0.5, wallH, 0.5);
+    // Overhead center light
+    const overhead = new THREE.PointLight(0xffffff, 0.2, 20);
+    overhead.position.set(0, 5, 0);
+    this._scene.add(overhead);
+
+    // --- Decorative pillars (improved) ---
+    const pillarGeo = new THREE.BoxGeometry(0.6, wallH, 0.6);
     const pillarMat = new THREE.MeshStandardMaterial({
       color: 0x161925,
-      roughness: 0.7,
-      metalness: 0.3,
+      roughness: 0.6,
+      metalness: 0.4,
     });
     const pillarPos = [
       [-12, wallH / 2, -12], [12, wallH / 2, -12],
@@ -264,28 +351,147 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
       pillar.position.set(...pp);
       arena.add(pillar);
+
+      // Pillar accent strip
+      const stripGeo = new THREE.BoxGeometry(0.05, wallH, 0.62);
+      const stripMat = new THREE.MeshBasicMaterial({
+        color: 0x00e0d0,
+        transparent: true,
+        opacity: 0.15,
+      });
+      const strip = new THREE.Mesh(stripGeo, stripMat);
+      strip.position.set(pp[0], pp[1], pp[2]);
+      arena.add(strip);
     }
 
-    // --- Floor accent markers (landing pads under target zones) ---
+    // --- Floor accent markers (improved landing pads) ---
     const markerMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
-      opacity: 0.04,
+      opacity: 0.06,
     });
     const markerGeo = new THREE.CircleGeometry(1.2, 32);
     const markerPositions = [
       [0, 0.02, -10], [-6, 0.02, -8], [6, 0.02, -8],
       [-4, 0.02, -14], [4, 0.02, -14], [0, 0.02, -6],
+      [-8, 0.02, -4], [8, 0.02, -4],
     ];
     for (const mp of markerPositions) {
       const marker = new THREE.Mesh(markerGeo, markerMat);
       marker.rotation.x = -Math.PI / 2;
       marker.position.set(...mp);
       arena.add(marker);
+
+      // Inner ring
+      const innerRingGeo = new THREE.RingGeometry(0.3, 0.35, 24);
+      const innerRing = new THREE.Mesh(innerRingGeo, markerMat);
+      innerRing.rotation.x = -Math.PI / 2;
+      innerRing.position.set(mp[0], mp[1] + 0.01, mp[2]);
+      arena.add(innerRing);
+    }
+
+    // --- Distance markers on floor ---
+    const distMarkerMat = new THREE.MeshBasicMaterial({
+      color: 0x00e0d0,
+      transparent: true,
+      opacity: 0.04,
+    });
+    const distances = [5, 10, 15];
+    for (const dist of distances) {
+      const ringGeo = new THREE.RingGeometry(dist - 0.05, dist + 0.05, 64);
+      const ring = new THREE.Mesh(ringGeo, distMarkerMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.015;
+      arena.add(ring);
     }
   }
 
   /* ---------- Target Management ---------- */
+
+  // Calculate difficulty progression based on session progress
+  _getDifficultyFactor() {
+    const elapsed = (Date.now() - this._sessionStartTime) / 1000;
+    const hitProgress = Math.min(this._hitCount / 30, 1); // Max effect at 30 hits
+    const timeProgress = Math.min(elapsed / 60, 1); // Max effect at 60 seconds
+    return Math.max(hitProgress, timeProgress);
+  }
+
+  // Generate a natural target position with zone-based spawning
+  _generateTargetPosition() {
+    const difficulty = this._getDifficultyFactor();
+
+    // Define spawn zones with weights
+    // Zone 1: Close range (5-8m) - easier, good for warmup
+    // Zone 2: Mid range (8-12m) - standard
+    // Zone 3: Far range (12-16m) - challenging
+    // Zone 4: Extreme angles (sides) - advanced
+
+    const zones = [
+      { minDist: 5, maxDist: 8, angleRange: 0.6, weight: 0.3 - difficulty * 0.1 }, // Close
+      { minDist: 8, maxDist: 12, angleRange: 0.8, weight: 0.4 }, // Mid
+      { minDist: 12, maxDist: 16, angleRange: 0.9, weight: 0.2 + difficulty * 0.1 }, // Far
+      { minDist: 6, maxDist: 14, angleRange: 1.2, weight: 0.1 + difficulty * 0.1 }, // Wide angles
+    ];
+
+    // Normalize weights
+    const totalWeight = zones.reduce((sum, z) => sum + z.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let selectedZone = zones[0];
+    for (const zone of zones) {
+      rand -= zone.weight;
+      if (rand <= 0) {
+        selectedZone = zone;
+        break;
+      }
+    }
+
+    // Calculate distance within zone
+    const distance = selectedZone.minDist + Math.random() * (selectedZone.maxDist - selectedZone.minDist);
+
+    // Calculate angle - avoid spawning too close to last position
+    let angle;
+    let attempts = 0;
+    do {
+      angle = (Math.random() - 0.5) * Math.PI * selectedZone.angleRange;
+      attempts++;
+    } while (this._lastTargetPos && attempts < 5 && this._isTooClose(angle, distance));
+
+    // Height distribution - natural with more at eye level
+    // Use weighted random for more realistic distribution
+    const heightZones = [
+      { min: 0.5, max: 1.2, weight: 0.2 }, // Low
+      { min: 1.2, max: 2.2, weight: 0.5 }, // Eye level (most common)
+      { min: 2.2, max: 3.0, weight: 0.2 }, // High
+      { min: 3.0, max: 3.8, weight: 0.1 }, // Very high
+    ];
+
+    const totalHeightWeight = heightZones.reduce((sum, z) => sum + z.weight, 0);
+    let heightRand = Math.random() * totalHeightWeight;
+    let selectedHeightZone = heightZones[0];
+    for (const zone of heightZones) {
+      heightRand -= zone.weight;
+      if (heightRand <= 0) {
+        selectedHeightZone = zone;
+        break;
+      }
+    }
+
+    const height = selectedHeightZone.min + Math.random() * (selectedHeightZone.max - selectedHeightZone.min);
+
+    const x = Math.sin(angle) * distance;
+    const z = -Math.cos(angle) * distance;
+
+    return { x, y: height, z, distance, angle };
+  }
+
+  // Check if new position is too close to last target
+  _isTooClose(angle, distance) {
+    if (!this._lastTargetPos) return false;
+    const dx = Math.sin(angle) * distance - this._lastTargetPos.x;
+    const dz = -Math.cos(angle) * distance - this._lastTargetPos.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    return dist < 3; // Minimum 3 units between targets
+  }
 
   _spawnTarget() {
     if (!this.running) return;
@@ -293,33 +499,28 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     // Remove any existing alive targets
     this._clearAliveTargets();
 
-    // Random position in the arena
-    const distance = 5 + Math.random() * 12;
-    const angle = (Math.random() - 0.5) * Math.PI * 0.9;
-    const height = 0.6 + Math.random() * 3.2;
-
-    const x = Math.sin(angle) * distance;
-    const z = -Math.cos(angle) * distance;
-    const y = height;
+    // Generate natural position
+    const pos = this._generateTargetPosition();
+    this._lastTargetPos = { x: pos.x, z: pos.z };
 
     const radius = this.targetBaseRadius;
 
-    // Target sphere
-    const targetGeo = new THREE.SphereGeometry(radius, 20, 20);
+    // Target sphere with improved materials
+    const targetGeo = new THREE.SphereGeometry(radius, 24, 24);
     const targetMat = new THREE.MeshStandardMaterial({
       color: 0x00e0d0,
       emissive: 0x00e0d0,
-      emissiveIntensity: 0.5,
-      roughness: 0.3,
-      metalness: 0.5,
+      emissiveIntensity: 0.6,
+      roughness: 0.25,
+      metalness: 0.6,
       transparent: true,
       opacity: 0,
     });
     const targetMesh = new THREE.Mesh(targetGeo, targetMat);
-    targetMesh.position.set(x, y, z);
+    targetMesh.position.set(pos.x, pos.y, pos.z);
 
-    // Inner core (bright dot)
-    const coreGeo = new THREE.SphereGeometry(radius * 0.35, 12, 12);
+    // Inner core (bright dot) - improved
+    const coreGeo = new THREE.SphereGeometry(radius * 0.4, 16, 16);
     const coreMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -328,8 +529,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     const core = new THREE.Mesh(coreGeo, coreMat);
     targetMesh.add(core);
 
-    // Outer ring (billboard)
-    const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.55, 32);
+    // Outer ring (billboard) - improved
+    const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.6, 32);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
@@ -339,18 +540,31 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     const ring = new THREE.Mesh(ringGeo, ringMat);
     targetMesh.add(ring);
 
+    // Secondary inner ring for depth
+    const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.8, 24);
+    const innerRingMat = new THREE.MeshBasicMaterial({
+      color: 0x00e0d0,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+    });
+    const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
+    targetMesh.add(innerRing);
+
     this._scene.add(targetMesh);
 
     this._targets.push({
       mesh: targetMesh,
       core: core,
       ring: ring,
+      innerRing: innerRing,
       radius: radius,
       spawnTime: Date.now(),
       alive: true,
       opacity: 0,
       hitAnim: 0,
-      baseY: y,
+      baseY: pos.y,
+      spawnPos: { x: pos.x, y: pos.y, z: pos.z },
     });
   }
 
@@ -383,6 +597,73 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
   /* ---------- Hit Detection ---------- */
 
+  // Create particle burst effect at target position
+  _createHitParticles(position) {
+    const particleCount = 12;
+    const particleGeo = new THREE.SphereGeometry(0.04, 6, 6);
+    const particleMat = new THREE.MeshBasicMaterial({
+      color: 0x00e0d0,
+      transparent: true,
+      opacity: 1,
+    });
+
+    for (let i = 0; i < particleCount; i++) {
+      const particle = new THREE.Mesh(particleGeo, particleMat.clone());
+      particle.position.copy(position);
+
+      // Random velocity in sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+      const speed = 3 + Math.random() * 4;
+      const vx = Math.sin(phi) * Math.cos(theta) * speed;
+      const vy = Math.sin(phi) * Math.sin(theta) * speed;
+      const vz = Math.cos(phi) * speed;
+
+      this._particles.push({
+        mesh: particle,
+        velocity: { x: vx, y: vy, z: vz },
+        life: 1.0,
+        decay: 2.5 + Math.random() * 1.5,
+      });
+
+      this._scene.add(particle);
+    }
+  }
+
+  // Update particles
+  _updateParticles(dt) {
+    const toRemove = [];
+
+    for (const p of this._particles) {
+      p.life -= dt * p.decay;
+
+      if (p.life <= 0) {
+        toRemove.push(p);
+      } else {
+        // Move particle
+        p.mesh.position.x += p.velocity.x * dt;
+        p.mesh.position.y += p.velocity.y * dt;
+        p.mesh.position.z += p.velocity.z * dt;
+
+        // Gravity
+        p.velocity.y -= 9.8 * dt;
+
+        // Fade and shrink
+        p.mesh.material.opacity = p.life;
+        p.mesh.scale.setScalar(p.life * 0.8 + 0.2);
+      }
+    }
+
+    // Remove dead particles
+    for (const p of toRemove) {
+      const idx = this._particles.indexOf(p);
+      if (idx !== -1) this._particles.splice(idx, 1);
+      if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      p.mesh.material.dispose();
+    }
+  }
+
   _handleClick(ev) {
     if (!this.running) return;
 
@@ -414,12 +695,22 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       if (target) {
         target.alive = false;
         target.hitAnim = 1.0;
+        this._hitCount++;
+
+        // Create particle burst at hit position
+        this._createHitParticles(target.mesh.position.clone());
+
         const reactionTime = Date.now() - target.spawnTime;
         if (this._onHit) this._onHit(reactionTime);
         hit = true;
 
         clearTimeout(this._spawnTimer);
-        this._spawnTimer = setTimeout(() => this._spawnTarget(), 180);
+        // Faster spawn delay that decreases with difficulty
+        const baseDelay = 150;
+        const minDelay = 80;
+        const difficulty = this._getDifficultyFactor();
+        const spawnDelay = baseDelay - (baseDelay - minDelay) * difficulty;
+        this._spawnTimer = setTimeout(() => this._spawnTarget(), spawnDelay);
       }
     }
 
@@ -515,45 +806,71 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     const dt = Math.min(this._clock.getDelta(), 0.1); // Cap delta to avoid jumps
     const now = Date.now();
 
+    // Update particles
+    this._updateParticles(dt);
+
     // Collect dead targets to remove (avoid mutating array during iteration)
     const toRemove = [];
 
     for (const t of this._targets) {
       if (t.alive) {
-        // Fade in
-        t.opacity = Math.min(1, t.opacity + dt * 6);
-        t.mesh.material.opacity = t.opacity;
-        t.core.material.opacity = t.opacity * 0.8;
-        t.ring.material.opacity = t.opacity * 0.2;
+        // Smooth fade in with easing
+        t.opacity = Math.min(1, t.opacity + dt * 8);
+        const easedOpacity = t.opacity < 1 ? 1 - Math.pow(1 - t.opacity, 3) : 1;
+        t.mesh.material.opacity = easedOpacity;
+        t.core.material.opacity = easedOpacity * 0.9;
+        t.ring.material.opacity = easedOpacity * 0.25;
+        if (t.innerRing) t.innerRing.material.opacity = easedOpacity * 0.15;
 
-        // Billboard the ring to face camera (in world space)
+        // Billboard the rings to face camera (in world space)
         const camPos = this._camera.position.clone();
         const localCamPos = t.mesh.worldToLocal(camPos);
         t.ring.lookAt(localCamPos);
+        if (t.innerRing) t.innerRing.lookAt(localCamPos);
 
-        // Subtle hover bob
-        t.mesh.position.y = t.baseY + Math.sin(now * 0.003 + t.spawnTime) * 0.06;
+        // Subtle hover bob with variation
+        const bobSpeed = 0.0025;
+        const bobAmount = 0.05;
+        t.mesh.position.y = t.baseY + Math.sin(now * bobSpeed + t.spawnTime * 0.001) * bobAmount;
+
+        // Subtle pulse on emissive
+        const pulse = 0.5 + Math.sin(now * 0.005) * 0.1;
+        t.mesh.material.emissiveIntensity = pulse;
       } else {
-        // Hit animation — expand briefly then shrink and fade
-        t.hitAnim -= dt * 5;
+        // Improved hit animation — flash, expand, then shrink and fade
+        t.hitAnim -= dt * 6;
         if (t.hitAnim <= 0) {
           toRemove.push(t);
         } else {
-          const s = 1 + (1 - t.hitAnim) * 0.5; // Expand then shrink
-          const fade = t.hitAnim;
-          if (t.hitAnim > 0.7) {
-            // Initial flash: expand slightly
-            const flash = (1 - t.hitAnim) / 0.3;
-            t.mesh.scale.setScalar(1 + flash * 0.3);
-            t.mesh.material.emissiveIntensity = 0.5 + flash * 2;
+          if (t.hitAnim > 0.8) {
+            // Initial flash: bright white flash and slight expand
+            const flash = (1 - t.hitAnim) / 0.2;
+            t.mesh.scale.setScalar(1 + flash * 0.4);
+            t.mesh.material.emissiveIntensity = 0.6 + flash * 3;
+            t.mesh.material.color.setHex(0xffffff);
+            t.core.material.opacity = 1;
+          } else if (t.hitAnim > 0.5) {
+            // Transition back to teal
+            const transition = (0.8 - t.hitAnim) / 0.3;
+            t.mesh.scale.setScalar(1.4 - transition * 0.3);
+            t.mesh.material.emissiveIntensity = 3 - transition * 2;
+            const colorLerp = transition;
+            t.mesh.material.color.setRGB(
+              0 + colorLerp * 0,
+              0.88 * (1 - colorLerp) + colorLerp * 0.88,
+              0.82 * (1 - colorLerp) + colorLerp * 0.82
+            );
           } else {
             // Shrink and fade
-            t.mesh.scale.setScalar(t.hitAnim * 1.15);
-            t.mesh.material.opacity = fade * 0.6;
-            t.mesh.material.emissiveIntensity = fade;
+            const shrink = t.hitAnim / 0.5;
+            t.mesh.scale.setScalar(shrink * 1.1);
+            t.mesh.material.opacity = shrink * 0.6;
+            t.mesh.material.emissiveIntensity = shrink;
+            t.mesh.material.color.setHex(0x00e0d0);
           }
-          t.core.material.opacity = fade * 0.5;
-          t.ring.material.opacity = fade * 0.15;
+          t.core.material.opacity = t.hitAnim * 0.5;
+          t.ring.material.opacity = t.hitAnim * 0.2;
+          if (t.innerRing) t.innerRing.material.opacity = t.hitAnim * 0.1;
         }
       }
     }
