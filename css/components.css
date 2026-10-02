@@ -770,6 +770,96 @@
   transform: translateY(-50%);
 }
 
+/* --- Crosshair Hit Flash --- */
+.vcrosshair-hit .vcrosshair-dot {
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+.vcrosshair-hit .vcrosshair-line {
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+/* --- Hit Marker X --- */
+.vhitmarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.vhitmarker-line {
+  position: absolute;
+  width: 10px;
+  height: 2px;
+  background: #fff;
+  top: 50%;
+  left: 50%;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+}
+.vhitmarker-1 {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.vhitmarker-2 {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+/* --- Countdown Overlay --- */
+.vcountdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 6;
+  background: rgba(5, 6, 8, 0.3);
+}
+.vcountdown-number {
+  font-family: var(--font-display);
+  font-size: 6rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  text-shadow: 0 0 40px rgba(0, 224, 208, 0.5), 0 0 80px rgba(0, 224, 208, 0.2);
+  animation: countdownPulse 0.8s ease-out;
+  letter-spacing: 0.05em;
+}
+@keyframes countdownPulse {
+  0% { transform: scale(1.5); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- Pause Overlay --- */
+.vpause-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(5, 6, 8, 0.6);
+  pointer-events: none;
+  z-index: 6;
+}
+.vpause-text {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent-secondary);
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 20px rgba(255, 184, 48, 0.3);
+}
+.vpause-hint {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
 /* --- Click to Aim Prompt --- */
 .vclick-prompt {
   position: absolute;
@@ -777,20 +867,22 @@
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--font-display);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   pointer-events: none;
   z-index: 5;
-  animation: fadeIn 0.5s ease;
-  transition: opacity 0.3s ease;
+  animation: clickPromptPulse 2s ease-in-out infinite;
+  padding: 8px 20px;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  background: rgba(0, 224, 208, 0.05);
 }
-
-.vgameplay-canvas-wrapper:has(canvas:focus) .vclick-prompt,
-.vclick-prompt.hidden {
-  opacity: 0;
+@keyframes clickPromptPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 /* --- Results Overlay --- */
@@ -839,7 +931,7 @@
 }
 .vresults-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-lg);
   text-align: center;
 }

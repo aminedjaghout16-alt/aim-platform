@@ -4,18 +4,12 @@
 window.VantagePages = window.VantagePages || {};
 
 VantagePages.Dashboard = function Dashboard({ onNavigate }) {
-  // Mock data
-  const recentResults = [
-    { scenario: 'Static Flicking', score: 742, grade: 'A', date: 'Today', accuracy: 89 },
-    { scenario: 'Smooth Tracking', score: 685, grade: 'B', date: 'Yesterday', accuracy: 82 },
-    { scenario: 'Micro Adjustments', score: 710, grade: 'A', date: '2 days ago', accuracy: 86 },
-  ];
-
+  // Real stats — start at zero for new users
   const quickStats = [
-    { label: 'Sessions', value: '24', icon: '◎', color: 'var(--accent-primary)' },
-    { label: 'Avg Score', value: '712', icon: '◈', color: 'var(--accent-secondary)' },
-    { label: 'Best Score', value: '842', icon: '△', color: 'var(--success)' },
-    { label: 'Accuracy', value: '86%', icon: '⟶', color: 'var(--info)' },
+    { label: 'Sessions', value: '0', icon: '◎', color: 'var(--accent-primary)' },
+    { label: 'Avg Score', value: '—', icon: '◈', color: 'var(--accent-secondary)' },
+    { label: 'Best Score', value: '—', icon: '△', color: 'var(--success)' },
+    { label: 'Accuracy', value: '—', icon: '⟶', color: 'var(--info)' },
   ];
 
   return e('div', { className: 'vpage-dashboard' },
@@ -48,28 +42,15 @@ VantagePages.Dashboard = function Dashboard({ onNavigate }) {
             onClick: () => onNavigate('stats'),
           }, 'View All →'),
         ),
-        e('div', { className: 'vresults-list' },
-          recentResults.map((r, i) =>
-            e('div', { key: i, className: 'vresult-row' },
-              e('div', { className: 'vresult-scenario' },
-                e('span', { className: 'vresult-icon' }, '◎'),
-                e('div', null,
-                  e('div', { className: 'vresult-name' }, r.scenario),
-                  e('div', { className: 'vresult-date text-secondary' }, r.date),
-                ),
-              ),
-              e('div', { className: 'vresult-score' },
-                e('span', { className: 'vresult-grade', style: { color: r.grade === 'A' ? 'var(--accent-primary)' : 'var(--accent-secondary)' } }, r.grade),
-                e('span', { className: 'vresult-points' }, r.score),
-              ),
-              e(VantageUI.ProgressBar, {
-                value: r.accuracy,
-                height: '4px',
-                color: 'var(--accent-primary)',
-              }),
-            )
-          ),
-        ),
+        e(VantageUI.EmptyState, {
+          icon: '◎',
+          title: 'No sessions yet',
+          description: 'Complete your first training session to see results here.',
+          action: e(VantageUI.Button, {
+            variant: 'secondary', size: 'sm',
+            onClick: () => onNavigate('training'),
+          }, 'START TRAINING'),
+        }),
       ),
 
       // Quick start

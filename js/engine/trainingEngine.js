@@ -76,6 +76,11 @@ VantageEngine.TrainingEngine = class {
   start() {
     if (this.state !== 'idle') return;
 
+    // Initialize the renderer immediately so the arena is visible during countdown
+    if (this.renderer && this.renderer.init) {
+      this.renderer.init();
+    }
+
     // Countdown
     this._setState('countdown');
     let count = 3;
@@ -204,6 +209,9 @@ VantageEngine.TrainingEngine = class {
   // Reset engine
   reset() {
     clearInterval(this._timer);
+    if (this.renderer && this.renderer.stop) {
+      this.renderer.stop();
+    }
     this.scenario = null;
     this.config = {};
     this.state = 'idle';

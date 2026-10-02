@@ -12,10 +12,10 @@ VantagePages.Statistics = function Statistics({ onNavigate }) {
 
     e('div', { className: 'vstats-grid' },
       [
-        { label: 'Total Sessions', value: '24', icon: '◎', color: 'var(--accent-primary)', subtext: '+3 this week' },
-        { label: 'Average Score', value: '712', icon: '◈', color: 'var(--accent-secondary)', subtext: '+18 from last week' },
-        { label: 'Best Score', value: '842', icon: '△', color: 'var(--success)', subtext: 'Static Flicking' },
-        { label: 'Total Time', value: '24m', icon: '⟶', color: 'var(--info)', subtext: 'Across all sessions' },
+        { label: 'Total Sessions', value: '0', icon: '◎', color: 'var(--accent-primary)', subtext: 'No sessions yet' },
+        { label: 'Average Score', value: '—', icon: '◈', color: 'var(--accent-secondary)', subtext: 'Complete a session' },
+        { label: 'Best Score', value: '—', icon: '△', color: 'var(--success)', subtext: 'No data yet' },
+        { label: 'Total Time', value: '0m', icon: '⟶', color: 'var(--info)', subtext: 'Across all sessions' },
       ].map((s, i) =>
         e('div', { key: i, className: `animate-in stagger-${i + 1}` },
           e(VantageUI.StatCard, s),
@@ -27,18 +27,15 @@ VantagePages.Statistics = function Statistics({ onNavigate }) {
     e(VantageUI.Card, { className: 'vstats-chart animate-in stagger-5' },
       e('h3', null, 'Score Progression'),
       e('div', { className: 'vstats-chart-placeholder' },
-        e('div', { className: 'vchart-empty' },
-          e('span', { className: 'text-secondary' }, 'Performance chart will appear here after training sessions'),
-          e('div', { className: 'vchart-bars' },
-            [65, 72, 68, 78, 74, 82, 86].map((h, i) =>
-              e('div', {
-                key: i,
-                className: 'vchart-bar',
-                style: { height: `${h}%`, animationDelay: `${i * 0.1}s` },
-              })
-            ),
-          ),
-        ),
+        e(VantageUI.EmptyState, {
+          icon: '◈',
+          title: 'No data yet',
+          description: 'Complete training sessions to see your performance chart here.',
+          action: e(VantageUI.Button, {
+            variant: 'secondary', size: 'sm',
+            onClick: () => onNavigate('training'),
+          }, 'START TRAINING'),
+        }),
       ),
     ),
 
@@ -52,14 +49,12 @@ VantagePages.Statistics = function Statistics({ onNavigate }) {
             e('span', { className: 'vstats-cat-name' }, cat.name),
             e('div', { className: 'vstats-cat-bar' },
               e(VantageUI.ProgressBar, {
-                value: cat.id === 'flicking' ? 72 : 0,
+                value: 0,
                 height: '4px',
                 color: cat.color,
               }),
             ),
-            e('span', { className: 'vstats-cat-score' },
-              cat.id === 'flicking' ? '72' : '—'
-            ),
+            e('span', { className: 'vstats-cat-score' }, '—'),
           )
         ),
       ),
