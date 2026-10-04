@@ -842,7 +842,7 @@
   justify-content: center;
   gap: 12px;
   background: rgba(5, 6, 8, 0.6);
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 6;
 }
 .vpause-text {
@@ -1672,3 +1672,89 @@
     flex-direction: column;
   }
 }
+
+
+/* --- Static Flick 3D: ready / pause / results additions --- */
+.vhud-hint {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  min-height: 1em;
+}
+.vhud-timer-low { color: var(--error); text-shadow: 0 0 12px rgba(255, 61, 90, 0.4); }
+.vpause-actions { display: flex; gap: 12px; margin-top: 12px; }
+
+.vready-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 6, 8, 0.55);
+  cursor: pointer;
+  z-index: 7;
+}
+.vready-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 56px;
+  text-align: center;
+  background: rgba(16, 18, 26, 0.85);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glow);
+}
+.vready-title {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.vready-cta {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent-primary);
+  text-shadow: 0 0 24px rgba(0, 224, 208, 0.4);
+  animation: clickPromptPulse 2s ease-in-out infinite;
+}
+.vready-text { font-size: 0.88rem; color: var(--text-secondary); max-width: 360px; }
+.vready-meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-tertiary); }
+.vready-error { font-size: 0.85rem; color: var(--error); }
+.vready-actions { margin-top: 8px; }
+
+.vresults-scenario {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.vresults-save {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  min-height: 1.2em;
+}
+.vresults-save-pb { color: var(--accent-secondary); text-shadow: 0 0 14px rgba(255, 184, 48, 0.4); font-weight: 700; }
+.vresults-screen .vresults-stats { grid-template-columns: repeat(4, 1fr); }
+.vresults-config { font-size: 0.78rem; color: var(--text-tertiary); letter-spacing: 0.04em; }
+.vresults-table-row-latest { background: var(--accent-primary-dim); }
+.vresults-latest-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: #000;
+  background: var(--accent-primary);
+}
+.vsetup-hint { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-tertiary); margin-top: -4px; }

@@ -3,14 +3,22 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
+// Last-used config for a scenario (falls back to the scenario defaults)
+VantagePages.getSavedConfig = function getSavedConfig(scenarioId) {
+  const scenario = VantageEngine.Scenarios.getById(scenarioId);
+  const base = { ...VantageEngine.Settings.DEFAULT_CONFIG, ...(scenario ? scenario.defaults : {}) };
+  try {
+    const raw = window.localStorage.getItem('vantage.trainingConfig.' + scenarioId);
+    if (raw) return { ...base, ...JSON.parse(raw) };
+  } catch (err) { /* storage unavailable or corrupt */ }
+  return base;
+};
+
 VantagePages.TrainingSetup = function TrainingSetup({ scenarioId, onNavigate, onStartTraining }) {
   const scenario = VantageEngine.Scenarios.getById(scenarioId);
   const Settings = VantageEngine.Settings;
 
-  const [config, setConfig] = useState({
-    ...Settings.DEFAULT_CONFIG,
-    ...(scenario ? scenario.defaults : {}),
-  });
+  const [config, setConfig] = useState(() => VantagePages.getSavedConfig(scenarioId));
 
   if (!scenario) {
     return e(VantageUI.EmptyState, {
@@ -60,6 +68,8 @@ VantagePages.TrainingSetup = function TrainingSetup({ scenarioId, onNavigate, on
           onChange: (v) => update('dpi', v),
           min: 200, max: 3200, step: 50,
         }),
+        e('p', { className: 'vsetup-hint' },
+          `≈ ${Math.round(Settings.getCm360(config.game, config.sensitivity, config.dpi))} cm per 360° turn`),
       ),
 
       // Difficulty & Duration
@@ -86,7 +96,7 @@ VantagePages.TrainingSetup = function TrainingSetup({ scenarioId, onNavigate, on
           label: 'Target Size',
           value: config.targetSize,
           onChange: (v) => update('targetSize', v),
-          options: Settings.getAllTargetSizes().map(s => ({ value: s.id, label: `${s.label} (${s.px}px)` })),
+          options: Settings.getAllTargetSizes().map(s => ({ value: s.id, label: s.label })),
         }),
         e(VantageUI.Select, {
           label: 'Target Speed',
@@ -106,7 +116,7 @@ VantagePages.TrainingSetup = function TrainingSetup({ scenarioId, onNavigate, on
       e(VantageUI.Button, {
         variant: 'primary', size: 'lg',
         onClick: () => onStartTraining(scenarioId, config),
-      }, 'BEGIN TRAINING'),
+      }, 'START TRAINING'),
     ),
   );
 };

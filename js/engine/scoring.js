@@ -6,26 +6,35 @@ window.VantageEngine = window.VantageEngine || {};
 VantageEngine.Scoring = {
   // Calculate score for a training session
   calculateScore(sessionData) {
-    const { hits, misses, totalTargets, avgReactionTime, duration, accuracy } = sessionData;
-    
+    const { hits = 0, misses = 0, avgReactionTime = 0, duration = 0 } = sessionData;
+    // Accuracy may be passed in; otherwise derive it from hits / misses
+    const accuracy = sessionData.accuracy !== undefined
+      ? sessionData.accuracy
+      : hits / Math.max(1, hits + misses);
+
     // Base score from accuracy (0-500)
-    const accuracyScore = (accuracy || 0) * 500;
-    
+    const accuracyScore = accuracy * 500;
+
     // Speed bonus from avg reaction time (0-300)
     const speedScore = avgReactionTime > 0
-      ? Math.max(0, 300 - (avgReactionTime - 150) * 0.5)
+      ? Math.max(0, Math.min(300, 300 - (avgReactionTime - 150) * 0.5))
       : 0;
-    
-    // Consistency bonus (0-200)
-    const consistencyScore = Math.min(200, (hits / Math.max(1, totalTargets)) * 200);
-    
-    const total = Math.round(accuracyScore + speedScore + consistencyScore);
-    
+
+    // Pace bonus (0-200): sustained hits per second, weighted by accuracy
+    const hitsPerSec = hits / Math.max(1, duration);
+    const consistencyScore = Math.min(200, hitsPerSec * 200 * accuracy);
+
+    // Volume factor: a handful of lucky hits must not earn a top grade
+    const expectedHits = Math.max(5, duration * 0.4);
+    const volume = Math.min(1, hits / expectedHits);
+
+    const total = Math.round((accuracyScore + speedScore + consistencyScore) * volume);
+
     return {
-      total: Math.min(1000, total),
-      accuracy: Math.round((accuracy || 0) * 100),
-      speedScore: Math.round(speedScore),
-      consistencyScore: Math.round(consistencyScore),
+      total: Math.max(0, Math.min(1000, total)),
+      accuracy: Math.round(accuracy * 100),
+      speedScore: Math.round(speedScore * volume),
+      consistencyScore: Math.round(consistencyScore * volume),
       grade: this.getGrade(total),
     };
   },
@@ -60,7 +69,7 @@ VantageEngine.Scoring = {
         duration: sessionData.duration || 0,
       },
       breakdown: {
-        accuracyScore: Math.round(sessionData.hits / Math.max(1, sessionData.hits + sessionData.misses) * 500),
+        accuracyScore: Math.max(0, score.total - score.speedScore - score.consistencyScore),
         speedScore: score.speedScore,
         consistencyScore: score.consistencyScore,
       },

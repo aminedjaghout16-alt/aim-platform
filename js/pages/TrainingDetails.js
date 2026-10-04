@@ -3,7 +3,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingDetails = function TrainingDetails({ scenarioId, onNavigate, onStartSetup }) {
+VantagePages.TrainingDetails = function TrainingDetails({ scenarioId, onNavigate, onStartSetup, onQuickStart }) {
   const scenario = VantageEngine.Scenarios.getById(scenarioId);
   if (!scenario) {
     return e(VantageUI.EmptyState, {
@@ -128,15 +128,15 @@ VantagePages.TrainingDetails = function TrainingDetails({ scenarioId, onNavigate
           e('div', { className: 'vdetails-settings-list' },
             e('div', { className: 'vdetail-row' },
               e('span', { className: 'text-secondary' }, 'Target Size'),
-              e('span', null, scenario.defaults.targetSize || 'Medium'),
+              e('span', null, (Settings.getTargetSize(scenario.defaults.targetSize) || {}).label || 'Medium'),
             ),
             e('div', { className: 'vdetail-row' },
               e('span', { className: 'text-secondary' }, 'Target Speed'),
-              e('span', null, scenario.defaults.targetSpeed || 'Normal'),
+              e('span', null, (Settings.getTargetSpeed(scenario.defaults.targetSpeed) || {}).label || 'Normal'),
             ),
             e('div', { className: 'vdetail-row' },
               e('span', { className: 'text-secondary' }, 'Duration'),
-              e('span', null, scenario.defaults.duration || '60s'),
+              e('span', null, (Settings.getDuration(scenario.defaults.duration) || {}).label || '60s'),
             ),
           ),
         ),
@@ -144,15 +144,20 @@ VantagePages.TrainingDetails = function TrainingDetails({ scenarioId, onNavigate
         // Action buttons
         e('div', { className: 'vdetails-actions-col animate-in stagger-4' },
           e(VantageUI.Button, {
+            variant: 'primary', size: 'lg',
+            onClick: () => onQuickStart(scenario.id),
+            style: { width: '100%' },
+          }, 'START'),
+          e(VantageUI.Button, {
+            variant: 'secondary',
+            onClick: () => onStartSetup(scenario.id),
+            style: { width: '100%' },
+          }, 'CUSTOMIZE SETTINGS'),
+          e(VantageUI.Button, {
             variant: 'ghost',
             onClick: () => onNavigate('training'),
             style: { width: '100%' },
           }, '← BACK TO LIBRARY'),
-          e(VantageUI.Button, {
-            variant: 'primary', size: 'lg',
-            onClick: () => onStartSetup(scenario.id),
-            style: { width: '100%' },
-          }, 'CONFIGURE & START'),
         ),
       ),
     ),

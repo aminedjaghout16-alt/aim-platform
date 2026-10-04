@@ -8,7 +8,7 @@ VantageEngine.TrainingEngine = class {
   constructor() {
     this.scenario = null;
     this.config = {};
-    this.state = 'idle'; // idle | countdown | running | paused | finished
+    this.state = 'idle'; // idle | ready | countdown | running | paused | finished
     this.renderer = null;
     this.sessionData = this._emptySessionData();
     this._timer = null;
@@ -17,6 +17,8 @@ VantageEngine.TrainingEngine = class {
     this._onStateChange = null;
     this._onTick = null;
     this._onFinish = null;
+    this._onCountdown = null;
+    this._countdownTimer = null;
   }
 
   _emptySessionData() {
@@ -59,6 +61,7 @@ VantageEngine.TrainingEngine = class {
   onStateChange(cb) { this._onStateChange = cb; }
   onTick(cb) { this._onTick = cb; }
   onFinish(cb) { this._onFinish = cb; }
+  onCountdown(cb) { this._onCountdown = cb; }
 
   // Resolve and attach the renderer
   attachRenderer(canvasElement) {
@@ -72,25 +75,37 @@ VantageEngine.TrainingEngine = class {
     return true;
   }
 
-  // Start the training session
-  start() {
-    if (this.state !== 'idle') return;
+  // Build the arena so it is visible before the countdown (state: ready)
+  prepare() {
+    if (this.state !== 'idle' || !this.renderer) return false;
+    if (this.renderer.init) this.renderer.init();
+    this._setState('ready');
+    return true;
+  }
 
-    // Initialize the renderer immediately so the arena is visible during countdown
+  // Start the training session (3 · 2 · 1 · GO, then gameplay)
+  start() {
+    if (this.state !== 'idle' && this.state !== 'ready') return;
+
+    // Initialize the renderer if prepare() wasn't called
     if (this.renderer && this.renderer.init) {
       this.renderer.init();
     }
 
-    // Countdown
     this._setState('countdown');
     let count = 3;
-    const countInterval = setInterval(() => {
+    if (this._onCountdown) this._onCountdown(count);
+    this._countdownTimer = setInterval(() => {
       count--;
       if (count <= 0) {
-        clearInterval(countInterval);
+        clearInterval(this._countdownTimer);
+        this._countdownTimer = null;
+        if (this._onCountdown) this._onCountdown(0); // GO
         this._beginSession();
+      } else if (this._onCountdown) {
+        this._onCountdown(count);
       }
-    }, 800);
+    }, 900);
   }
 
   _beginSession() {
@@ -181,8 +196,9 @@ VantageEngine.TrainingEngine = class {
 
   // Finish the session
   finish() {
-    if (this.state === 'finished' || this.state === 'idle') return;
+    if (this.state !== 'running' && this.state !== 'paused') return;
     clearInterval(this._timer);
+    this.sessionData.duration = Math.round(this._elapsed / 1000);
     this._setState('finished');
 
     if (this.renderer && this.renderer.stop) this.renderer.stop();
@@ -209,6 +225,12 @@ VantageEngine.TrainingEngine = class {
   // Reset engine
   reset() {
     clearInterval(this._timer);
+    clearInterval(this._countdownTimer);
+    this._countdownTimer = null;
+    this._onStateChange = null;
+    this._onTick = null;
+    this._onFinish = null;
+    this._onCountdown = null;
     if (this.renderer && this.renderer.stop) {
       this.renderer.stop();
     }

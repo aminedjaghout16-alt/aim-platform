@@ -9,7 +9,7 @@ VantageEngine.Scenarios = {
   REGISTRY: [
     {
       id: 'static-flicking',
-      name: 'Static Flicking',
+      name: 'Static Flick — 3D',
       shortName: 'Flick',
       category: 'flicking',
       description: 'Eliminate targets that appear at random positions in a 3D arena. Focus on speed and precision flicks from your crosshair placement to each new target.',

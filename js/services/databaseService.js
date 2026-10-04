@@ -6,8 +6,28 @@ window.VantageServices = window.VantageServices || {};
 VantageServices.DatabaseService = {
   _collections: {},
 
+  _STORAGE_KEY: 'vantage.db.v1',
+
   init() {
-    console.log('[DatabaseService] Initialized — Firebase not configured');
+    // Restore saved data (results survive page reloads)
+    try {
+      const raw = window.localStorage.getItem(this._STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') this._collections = parsed;
+      }
+    } catch (err) {
+      console.warn('[DatabaseService] Could not restore saved data', err);
+    }
+    console.log('[DatabaseService] Initialized — Firebase not configured, using local storage');
+  },
+
+  _persist() {
+    try {
+      window.localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._collections));
+    } catch (err) {
+      console.warn('[DatabaseService] Could not persist data', err);
+    }
   },
 
   // Generic collection reference
@@ -20,6 +40,7 @@ VantageServices.DatabaseService = {
         const id = 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
         const doc = { id, ...data, createdAt: new Date().toISOString() };
         this._collections[name].push(doc);
+        this._persist();
         console.log(`[DB] Added to ${name}:`, doc.id);
         return doc;
       },
@@ -41,6 +62,7 @@ VantageServices.DatabaseService = {
         const idx = this._collections[name].findIndex(d => d.id === id);
         if (idx >= 0) {
           this._collections[name][idx] = { ...this._collections[name][idx], ...data };
+          this._persist();
           console.log(`[DB] Updated ${name}/${id}`);
           return this._collections[name][idx];
         }
@@ -48,6 +70,7 @@ VantageServices.DatabaseService = {
       },
       delete: async (id) => {
         this._collections[name] = this._collections[name].filter(d => d.id !== id);
+        this._persist();
         console.log(`[DB] Deleted ${name}/${id}`);
       },
     };

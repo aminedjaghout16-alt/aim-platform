@@ -3,7 +3,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario }) {
+VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario, onQuickStart }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterDifficulty, setFilterDifficulty] = useState('all');
@@ -193,8 +193,8 @@ VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectSc
                 e('div', { className: 'vscenario-footer' },
                   e(VantageUI.Button, {
                     variant: 'primary', size: 'sm',
-                    onClick: (ev) => { ev.stopPropagation(); onSelectScenario(s.id); },
-                  }, 'START TRAINING'),
+                    onClick: (ev) => { ev.stopPropagation(); (onQuickStart || onSelectScenario)(s.id); },
+                  }, 'START'),
                 ),
               ),
             );

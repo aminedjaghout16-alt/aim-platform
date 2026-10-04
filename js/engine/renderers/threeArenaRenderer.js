@@ -3,7 +3,7 @@
    Uses Three.js for a first-person aim training arena.
    Reusable engine: future scenarios share this renderer.
    ============================================ */
-VantageEngine.Renderers.ThreeArenaRenderer = class {
+VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   constructor(canvas, scenario, config) {
     this.canvas = canvas;
     this.scenario = scenario;
@@ -13,9 +13,24 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
     this._onHit = null;
     this._onMiss = null;
 
-    // Resolve target size from settings
-    const sizeSetting = VantageEngine.Settings.getTargetSize(config.targetSize || 'medium');
-    this.targetBaseRadius = sizeSetting ? sizeSetting.px / 100 : 0.36;
+    // Resolve target size from settings (difficulty shrinks targets: sqrt keeps Extreme playable)
+    const S = VantageEngine.Settings;
+    const sizeSetting = S.getTargetSize(config.targetSize || 'medium');
+    const diffSetting = S.getDifficulty(config.difficulty || 'medium');
+    const diffMult = diffSetting ? diffSetting.multiplier : 1;
+    const baseRadius = sizeSetting ? sizeSetting.px / 100 : 0.36;
+    this.targetBaseRadius = baseRadius / Math.sqrt(diffMult);
+
+    // Target speed controls how quickly the next target appears after a hit
+    const speedSetting = S.getTargetSpeed(config.targetSpeed || 'normal');
+    this._speedMult = speedSetting ? speedSetting.multiplier : 1;
+
+    // Mouse sensitivity: radians per mouse count, from the chosen game's yaw factor
+    const game = S.getGame(config.game) || S.getGame('generic');
+    const sens = Number(config.sensitivity) > 0 ? Number(config.sensitivity) : (game ? game.defaultSensitivity : 1);
+    const yawDeg = game && game.yaw ? game.yaw : 0.022;
+    this._radPerCount = sens * yawDeg * Math.PI / 180;
+    this._paused = false;
 
     // Camera / mouse-look state
     this._yaw = 0;
@@ -80,6 +95,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   }
 
   pause() {
+    this._paused = true;
     this.running = false;
     clearTimeout(this._spawnTimer);
     this._spawnPending = false;
@@ -92,6 +108,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   }
 
   resume() {
+    this._paused = false;
     this._stopIdleLoop();
     this.running = true;
     this._spawnPending = false;
@@ -101,6 +118,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   }
 
   stop() {
+    if (this._stopped) return;
+    this._stopped = true;
     this.running = false;
     this._spawnPending = false;
     clearTimeout(this._spawnTimer);
@@ -136,6 +155,19 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       p.mesh.material.dispose();
     }
     this._particles = [];
+  }
+
+  // Request mouse lock (must be called from a user gesture). Never throws.
+  requestLock() {
+    try {
+      if (!this.canvas || document.pointerLockElement === this.canvas) return;
+      const r = this.canvas.requestPointerLock();
+      if (r && typeof r.catch === 'function') r.catch(() => {});
+    } catch (err) { /* browser refused; user can click again */ }
+  }
+
+  isLocked() {
+    return !!this.canvas && document.pointerLockElement === this.canvas;
   }
 
   setCallbacks({ onHit, onMiss }) {
@@ -427,8 +459,10 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   }
 
   // Get the player's current look direction as a world-space angle (yaw)
+  // Spawn angles use x = sin(a), z = -cos(a); the camera's forward vector for yaw θ is
+  // (-sin θ, 0, -cos θ), so the look direction in spawn-angle space is -yaw.
   _getPlayerLookYaw() {
-    return this._yaw;
+    return -this._yaw;
   }
 
   // Generate a natural target position with FOV-aware zone-based spawning
@@ -740,15 +774,19 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   }
 
   _handleClick(ev) {
-    if (!this.running) return;
+    if (ev.button !== undefined && ev.button !== 0) return;
+    if (this._paused || this._stopped) return;
 
-    // Request pointer lock on first click if not locked
+    // First click locks the mouse (also allowed during the countdown)
     if (!this._pointerLocked) {
-      this.canvas.requestPointerLock();
+      this.requestLock();
       return;
     }
+    if (!this.running) return;
 
-    // Raycast from center of screen (crosshair)
+    // Raycast from center of screen (crosshair). Refresh the camera matrix first so a click
+    // that lands right after a mouse move uses the current aim, not last frame's.
+    this._camera.updateMatrixWorld();
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
 
     const meshes = this._targets.filter(t => t.alive).map(t => t.mesh);
@@ -757,7 +795,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
       return;
     }
 
-    const intersects = this._raycaster.intersectObjects(meshes, true);
+    // Only the target sphere is hittable (decorative rings/core are children and must not count)
+    const intersects = this._raycaster.intersectObjects(meshes, false);
 
     let hit = false;
     if (intersects.length > 0) {
@@ -784,7 +823,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
         const baseDelay = 150;
         const minDelay = 80;
         const difficulty = this._getDifficultyFactor();
-        const spawnDelay = baseDelay - (baseDelay - minDelay) * difficulty;
+        const spawnDelay = (baseDelay - (baseDelay - minDelay) * difficulty) / this._speedMult;
         this._spawnPending = true;
         this._spawnTimer = setTimeout(() => {
           this._spawnPending = false;
@@ -799,11 +838,10 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
   /* ---------- Mouse Look ---------- */
 
   _handleMouseMove(ev) {
-    if (!this._pointerLocked || !this.running) return;
+    if (!this._pointerLocked || this._paused || this._stopped || !this._camera) return;
 
-    const sensitivity = 0.002;
-    this._yaw -= ev.movementX * sensitivity;
-    this._pitch -= ev.movementY * sensitivity;
+    this._yaw -= ev.movementX * this._radPerCount;
+    this._pitch -= ev.movementY * this._radPerCount;
 
     // Clamp pitch
     this._pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this._pitch));
@@ -836,7 +874,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
   _bindEvents() {
     document.addEventListener('mousemove', this._onMouseMove);
-    this.canvas.addEventListener('click', this._onClick);
+    this.canvas.addEventListener('mousedown', this._onClick);
     this.canvas.addEventListener('contextmenu', this._onContextMenu);
     document.addEventListener('pointerlockchange', this._onPointerLockChange);
     window.addEventListener('resize', this._onResize);
@@ -845,7 +883,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class {
 
   _unbindEvents() {
     document.removeEventListener('mousemove', this._onMouseMove);
-    this.canvas.removeEventListener('click', this._onClick);
+    this.canvas.removeEventListener('mousedown', this._onClick);
     this.canvas.removeEventListener('contextmenu', this._onContextMenu);
     document.removeEventListener('pointerlockchange', this._onPointerLockChange);
     window.removeEventListener('resize', this._onResize);

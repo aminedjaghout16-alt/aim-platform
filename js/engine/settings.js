@@ -38,12 +38,12 @@ VantageEngine.Settings = {
 
   // Supported games
   GAMES: [
-    { id: 'valorant', name: 'Valorant', defaultSensitivity: 0.35, defaultDPI: 800 },
-    { id: 'cs2', name: 'Counter-Strike 2', defaultSensitivity: 2.0, defaultDPI: 800 },
-    { id: 'overwatch2', name: 'Overwatch 2', defaultSensitivity: 5.0, defaultDPI: 800 },
-    { id: 'apex', name: 'Apex Legends', defaultSensitivity: 2.5, defaultDPI: 800 },
-    { id: 'fortnite', name: 'Fortnite', defaultSensitivity: 7.0, defaultDPI: 800 },
-    { id: 'generic', name: 'Generic FPS', defaultSensitivity: 1.0, defaultDPI: 800 },
+    { id: 'valorant', name: 'Valorant', defaultSensitivity: 0.35, defaultDPI: 800, yaw: 0.07 },
+    { id: 'cs2', name: 'Counter-Strike 2', defaultSensitivity: 2.0, defaultDPI: 800, yaw: 0.022 },
+    { id: 'overwatch2', name: 'Overwatch 2', defaultSensitivity: 5.0, defaultDPI: 800, yaw: 0.0066 },
+    { id: 'apex', name: 'Apex Legends', defaultSensitivity: 2.5, defaultDPI: 800, yaw: 0.022 },
+    { id: 'fortnite', name: 'Fortnite', defaultSensitivity: 7.0, defaultDPI: 800, yaw: 0.005555 },
+    { id: 'generic', name: 'Generic FPS', defaultSensitivity: 1.0, defaultDPI: 800, yaw: 0.022 },
   ],
 
   // Default training configuration
@@ -62,6 +62,14 @@ VantageEngine.Settings = {
   getTargetSize(id) { return Object.values(this.TARGET_SIZE).find(d => d.id === id); },
   getTargetSpeed(id) { return Object.values(this.TARGET_SPEED).find(d => d.id === id); },
   getGame(id) { return this.GAMES.find(g => g.id === id); },
+
+  // Physical mouse distance for a full 360° turn, in cm
+  getCm360(gameId, sensitivity, dpi) {
+    const g = this.getGame(gameId) || this.getGame('generic');
+    const degPerCount = (Number(sensitivity) || 0) * (g.yaw || 0.022);
+    if (!degPerCount || !dpi) return 0;
+    return (360 / degPerCount) / dpi * 2.54;
+  },
 
   getAllDifficulties() { return Object.values(this.DIFFICULTY); },
   getAllDurations() { return Object.values(this.DURATION); },
