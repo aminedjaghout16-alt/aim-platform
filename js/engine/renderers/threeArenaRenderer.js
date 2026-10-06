@@ -29,8 +29,18 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const game = S.getGame(config.game) || S.getGame('generic');
     const sens = Number(config.sensitivity) > 0 ? Number(config.sensitivity) : (game ? game.defaultSensitivity : 1);
     const yawDeg = game && game.yaw ? game.yaw : 0.022;
+    this._yawDeg = yawDeg;
     this._radPerCount = sens * yawDeg * Math.PI / 180;
     this._paused = false;
+    this._pauseStart = 0;
+
+    // Vertical field of view in degrees (changeable live via setFov)
+    this._fov = Number(config.fov) > 0 ? Number(config.fov) : 75;
+
+    // Input guards after (re)acquiring the mouse: ignore stray clicks and the
+    // first mouse-move events (some browsers report a large bogus delta on lock)
+    this._ignoreClicksUntil = 0;
+    this._skipMoves = 0;
 
     // Camera / mouse-look state
     this._yaw = 0;
@@ -96,6 +106,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   pause() {
     this._paused = true;
+    this._pauseStart = Date.now();
     this.running = false;
     clearTimeout(this._spawnTimer);
     this._spawnPending = false;
@@ -108,6 +119,14 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   }
 
   resume() {
+    // Shift time-based state forward by the time spent paused, so pausing never
+    // inflates reaction times or advances the difficulty ramp.
+    if (this._pauseStart) {
+      const pausedMs = Date.now() - this._pauseStart;
+      this._sessionStartTime += pausedMs;
+      for (const t of this._targets) t.spawnTime += pausedMs;
+      this._pauseStart = 0;
+    }
     this._paused = false;
     this._stopIdleLoop();
     this.running = true;
@@ -170,6 +189,32 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     return !!this.canvas && document.pointerLockElement === this.canvas;
   }
 
+  // ---- Live settings (safe to call at any time, including while paused) ----
+
+  // In-game sensitivity for the chosen game; takes effect on the very next mouse move
+  setSensitivity(sens) {
+    const n = Number(sens);
+    if (!(n > 0)) return;
+    this._radPerCount = n * this._yawDeg * Math.PI / 180;
+  }
+
+  // Vertical field of view in degrees
+  setFov(deg) {
+    const n = Number(deg);
+    if (!(n > 0)) return;
+    this._fov = n;
+    if (this._camera) {
+      this._camera.fov = n;
+      this._camera.updateProjectionMatrix();
+    }
+  }
+
+  // 0..1 progression of the existing difficulty ramp (hits + time based)
+  getProgression() {
+    if (!this._sessionStartTime) return 0;
+    return this._getDifficultyFactor();
+  }
+
   setCallbacks({ onHit, onMiss }) {
     this._onHit = onHit;
     this._onMiss = onMiss;
@@ -186,7 +231,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._scene.background = new THREE.Color(0x080a10);
     this._scene.fog = new THREE.Fog(0x080a10, 25, 55);
 
-    this._camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 100);
+    this._camera = new THREE.PerspectiveCamera(this._fov, w / h, 0.1, 100);
     this._camera.position.set(0, 1.7, 0);
     this._camera.rotation.order = 'YXZ';
 
@@ -450,7 +495,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   // Calculate difficulty progression based on session progress
   _getDifficultyFactor() {
-    const elapsed = (Date.now() - this._sessionStartTime) / 1000;
+    const nowMs = this._paused && this._pauseStart ? this._pauseStart : Date.now();
+    const elapsed = (nowMs - this._sessionStartTime) / 1000;
     // Smooth ramp: hits count more early, time catches up later
     const hitProgress = Math.min(this._hitCount / 40, 1);
     const timeProgress = Math.min(elapsed / 90, 1);
@@ -776,6 +822,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   _handleClick(ev) {
     if (ev.button !== undefined && ev.button !== 0) return;
     if (this._paused || this._stopped) return;
+    // A double-click on a menu button must not turn into a shot the moment the mouse re-locks
+    if (this._pointerLocked && Date.now() < this._ignoreClicksUntil) return;
 
     // First click locks the mouse (also allowed during the countdown)
     if (!this._pointerLocked) {
@@ -839,6 +887,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   _handleMouseMove(ev) {
     if (!this._pointerLocked || this._paused || this._stopped || !this._camera) return;
+    if (this._skipMoves > 0) { this._skipMoves--; return; }
 
     this._yaw -= ev.movementX * this._radPerCount;
     this._pitch -= ev.movementY * this._radPerCount;
@@ -851,7 +900,12 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   }
 
   _handlePointerLockChange() {
+    const wasLocked = this._pointerLocked;
     this._pointerLocked = document.pointerLockElement === this.canvas;
+    if (this._pointerLocked && !wasLocked) {
+      this._ignoreClicksUntil = Date.now() + 250;
+      this._skipMoves = 2;
+    }
     // Update canvas cursor
     if (this.canvas) {
       this.canvas.style.cursor = this._pointerLocked ? 'none' : 'crosshair';
