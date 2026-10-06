@@ -101,7 +101,8 @@ VantageEngine.TrainingEngine = class {
         clearInterval(this._countdownTimer);
         this._countdownTimer = null;
         if (this._onCountdown) this._onCountdown(0); // GO
-        this._beginSession();
+        // Small delay after GO before starting gameplay
+        setTimeout(() => this._beginSession(), 650);
       } else if (this._onCountdown) {
         this._onCountdown(count);
       }
