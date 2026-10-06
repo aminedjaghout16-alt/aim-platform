@@ -302,7 +302,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     innerZone.position.y = 0.02;
     arena.add(innerZone);
 
-    // --- Walls with subtle panel lines ---
+    // --- Walls ---
     const wallMat = new THREE.MeshStandardMaterial({
       color: 0x3a4660,
       roughness: 0.85,
@@ -323,24 +323,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       wall.rotation.y = cfg.ry;
       arena.add(wall);
 
-      // Wall panel accent lines
-      const panelLineMat = new THREE.MeshBasicMaterial({
-        color: 0x8fa4cc,
-        transparent: true,
-        opacity: 0.55,
-      });
-      for (let i = -15; i <= 15; i += 10) {
-        const lineGeo = new THREE.PlaneGeometry(0.08, wallH);
-        const line = new THREE.Mesh(lineGeo, panelLineMat);
-        if (cfg.ry === 0 || Math.abs(cfg.ry) === Math.PI) {
-          line.position.set(i, wallH / 2, cfg.pos[2] + (cfg.ry === 0 ? 0.01 : -0.01));
-          line.rotation.y = cfg.ry;
-        } else {
-          line.position.set(cfg.pos[0] + (cfg.ry > 0 ? 0.01 : -0.01), wallH / 2, i);
-          line.rotation.y = cfg.ry;
-        }
-        arena.add(line);
-      }
     }
 
     // --- Ceiling ---
@@ -356,49 +338,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     ceilGrid.material.transparent = true;
     ceilGrid.material.opacity = 0.7;
     arena.add(ceilGrid);
-
-    // --- Accent trim lines (improved) ---
-    const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.85 });
-    const trimGeo = new THREE.PlaneGeometry(40, 0.12);
-    const trimPositions = [
-      { pos: [0, 1.0, -half + 0.02], ry: 0 },
-      { pos: [0, 1.0, half - 0.02], ry: Math.PI },
-    ];
-    for (const tp of trimPositions) {
-      const trim = new THREE.Mesh(trimGeo, trimMat);
-      trim.position.set(...tp.pos);
-      trim.rotation.y = tp.ry;
-      arena.add(trim);
-    }
-
-    // Side trims
-    const sideTrimGeo = new THREE.PlaneGeometry(40, 0.12);
-    const sideTrims = [
-      { pos: [-half + 0.02, 1.0, 0], ry: Math.PI / 2 },
-      { pos: [half - 0.02, 1.0, 0], ry: -Math.PI / 2 },
-    ];
-    for (const st of sideTrims) {
-      const trim = new THREE.Mesh(sideTrimGeo, trimMat);
-      trim.position.set(...st.pos);
-      trim.rotation.y = st.ry;
-      arena.add(trim);
-    }
-
-    // Upper trim lines
-    const upperTrimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.6 });
-    const upperTrimGeo = new THREE.PlaneGeometry(40, 0.08);
-    const upperTrims = [
-      { pos: [0, wallH - 0.5, -half + 0.02], ry: 0 },
-      { pos: [0, wallH - 0.5, half - 0.02], ry: Math.PI },
-      { pos: [-half + 0.02, wallH - 0.5, 0], ry: Math.PI / 2 },
-      { pos: [half - 0.02, wallH - 0.5, 0], ry: -Math.PI / 2 },
-    ];
-    for (const ut of upperTrims) {
-      const trim = new THREE.Mesh(upperTrimGeo, upperTrimMat);
-      trim.position.set(...ut.pos);
-      trim.rotation.y = ut.ry;
-      arena.add(trim);
-    }
 
     // --- Crisp edge outlines: floor/ceiling seams + vertical corners ---
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x9fe8ff });
@@ -489,32 +428,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       const strip = new THREE.Mesh(stripGeo, stripMat);
       strip.position.set(pp[0], pp[1], pp[2]);
       arena.add(strip);
-    }
-
-    // --- Floor accent markers (improved landing pads) ---
-    const markerMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
-      transparent: true,
-      opacity: 0.08,
-    });
-    const markerGeo = new THREE.CircleGeometry(1.2, 32);
-    const markerPositions = [
-      [0, 0.02, -10], [-6, 0.02, -8], [6, 0.02, -8],
-      [-4, 0.02, -14], [4, 0.02, -14], [0, 0.02, -6],
-      [-8, 0.02, -4], [8, 0.02, -4],
-    ];
-    for (const mp of markerPositions) {
-      const marker = new THREE.Mesh(markerGeo, markerMat);
-      marker.rotation.x = -Math.PI / 2;
-      marker.position.set(...mp);
-      arena.add(marker);
-
-      // Inner ring
-      const innerRingGeo = new THREE.RingGeometry(0.3, 0.35, 24);
-      const innerRing = new THREE.Mesh(innerRingGeo, markerMat);
-      innerRing.rotation.x = -Math.PI / 2;
-      innerRing.position.set(mp[0], mp[1] + 0.01, mp[2]);
-      arena.add(innerRing);
     }
 
     // --- Distance markers on floor ---
