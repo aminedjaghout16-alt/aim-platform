@@ -15,7 +15,7 @@
   const AUTH_PAGES = ['login', 'register'];
 
   function App() {
-    const [page, setPage] = useState('landing');
+    const [page, setPage] = useState(null); // null = waiting for auth
     const [pageParam, setPageParam] = useState(null);
     const [user, setUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
@@ -28,13 +28,19 @@
       const unsub = VantageServices.AuthService.onAuthStateChanged((u) => {
         setUser(u);
         setAuthLoading(false);
+        // Set initial page based on auth state
+        if (u) {
+          setPage('dashboard');
+        } else {
+          setPage('login');
+        }
       });
       return unsub;
     }, []);
 
     // Auth guard: redirect based on auth state
     useEffect(() => {
-      if (authLoading) return;
+      if (authLoading || page === null) return;
 
       // If user is authenticated and on login/register, redirect to dashboard
       if (user && AUTH_PAGES.includes(page)) {
@@ -114,7 +120,7 @@
     }, [navigate]);
 
     // Show loading screen while checking auth state
-    if (authLoading) {
+    if (authLoading || page === null) {
       return e('div', { className: 'vlanding' },
         e('div', { style: {
           display: 'flex', alignItems: 'center', justifyContent: 'center',

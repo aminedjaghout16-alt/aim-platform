@@ -91,15 +91,17 @@ VantageServices.AuthService = {
       return function () {};
     }
 
-    // Wrap Firebase's onAuthStateChanged to also pass our enriched user object
+    // Use the internal listener system instead of creating a separate Firebase listener
+    this._listeners.push(callback);
+    
+    // Return unsubscribe function
     var self = this;
-    var unsub = window.VantageApp.auth.onAuthStateChanged(function () {
-      // Small delay to let our internal handler update _currentUser first
-      setTimeout(function () {
-        callback(self._currentUser);
-      }, 50);
-    });
-    return unsub;
+    return function () {
+      var idx = self._listeners.indexOf(callback);
+      if (idx > -1) {
+        self._listeners.splice(idx, 1);
+      }
+    };
   },
 
   async signInWithEmail(email, password) {
