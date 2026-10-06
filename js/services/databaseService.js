@@ -153,6 +153,9 @@ VantageServices.DatabaseService = {
           results.push({ id: doc.id, ...doc.data() });
         });
         callback(results);
+      }, function (err) {
+        console.error('[DatabaseService] onResultsChanged error:', err);
+        callback([]);
       });
   },
 

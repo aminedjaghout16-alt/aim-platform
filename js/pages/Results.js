@@ -10,17 +10,10 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
 
   useEffect(function () {
     if (!uid) { setResults([]); return; }
-    var cancelled = false;
-    VantageServices.DatabaseService.getUserResults(uid)
-      .then(function (rows) {
-        if (cancelled) return;
-        var sorted = rows.slice().sort(function (a, b) {
-          return new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt);
-        });
-        setResults(sorted);
-      })
-      .catch(function () { if (!cancelled) setResults([]); });
-    return function () { cancelled = true; };
+    var unsub = VantageServices.DatabaseService.onResultsChanged(uid, function (rows) {
+      setResults(rows || []);
+    });
+    return function () { if (unsub) unsub(); };
   }, [uid]);
 
   var gradeColor = function (g) {
