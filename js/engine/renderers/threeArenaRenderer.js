@@ -344,11 +344,18 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // --- Ceiling ---
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 0.95 });
+    const ceilMat = new THREE.MeshBasicMaterial({ color: 0x2a3348 });
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = wallH;
     arena.add(ceiling);
+
+    // Ceiling grid so the top of the room has visible structure
+    const ceilGrid = new THREE.GridHelper(40, 10, 0x5a6c96, 0x3e4b6c);
+    ceilGrid.position.y = wallH - 0.02;
+    ceilGrid.material.transparent = true;
+    ceilGrid.material.opacity = 0.7;
+    arena.add(ceilGrid);
 
     // --- Accent trim lines (improved) ---
     const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.85 });
@@ -488,7 +495,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const markerMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.08,
     });
     const markerGeo = new THREE.CircleGeometry(1.2, 32);
     const markerPositions = [
@@ -532,12 +539,12 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const group = new THREE.Group();
 
     // Materials (shared for performance)
-    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.35, metalness: 0.85 });
-    const medMetal = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.4, metalness: 0.7 });
-    const lightMetal = new THREE.MeshStandardMaterial({ color: 0x3a3a42, roughness: 0.3, metalness: 0.9 });
-    const gripMat = new THREE.MeshStandardMaterial({ color: 0x111114, roughness: 0.8, metalness: 0.1 });
+    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x4a505e, roughness: 0.5, metalness: 0.25 });
+    const medMetal = new THREE.MeshStandardMaterial({ color: 0x666e80, roughness: 0.5, metalness: 0.25 });
+    const lightMetal = new THREE.MeshStandardMaterial({ color: 0x9099ad, roughness: 0.4, metalness: 0.3 });
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x30343e, roughness: 0.8, metalness: 0.1 });
     const skinMat = new THREE.MeshStandardMaterial({ color: 0xc8956c, roughness: 0.7, metalness: 0.05 });
-    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x1c1f28, roughness: 0.75, metalness: 0.1 });
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2e3444, roughness: 0.75, metalness: 0.1 });
     const accentMat = new THREE.MeshStandardMaterial({ color: 0x00e0d0, roughness: 0.3, metalness: 0.6, emissive: 0x00e0d0, emissiveIntensity: 0.15 });
 
     // --- Receiver / body ---
@@ -676,6 +683,20 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Position the weapon group relative to camera
     group.position.copy(this._weaponRestPos);
     group.rotation.copy(this._weaponRestRot);
+
+    // Light edge outlines so the gun's shape reads clearly
+    const gunEdgeMat = new THREE.LineBasicMaterial({ color: 0xc8d4ea, transparent: true, opacity: 0.55 });
+    const boxes = [];
+    group.traverse((c) => {
+      if (c.isMesh && c.geometry && c.geometry.type === 'BoxGeometry' && c.material.isMeshStandardMaterial) boxes.push(c);
+    });
+    for (const m of boxes) {
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), gunEdgeMat);
+      edges.position.copy(m.position);
+      edges.rotation.copy(m.rotation);
+      edges.scale.copy(m.scale);
+      m.parent.add(edges);
+    }
 
     // Disable raycasting on all weapon meshes so they never interfere with aiming
     group.traverse((child) => {
