@@ -180,7 +180,8 @@
     };
 
     if (fullScreenPages.includes(page)) {
-      return e('div', { className: 'vapp-fullscreen' }, renderPage());
+      var wrapperClass = page === 'gameplay' ? 'vapp-fullscreen' : 'vapp-fullscreen-scroll';
+      return e('div', { className: wrapperClass }, renderPage());
     }
 
     return e(VantageComponents.Layout, {
