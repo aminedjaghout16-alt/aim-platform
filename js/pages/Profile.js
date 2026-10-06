@@ -1,12 +1,10 @@
 /* ============================================
-   Profile Page — Firebase user profile & avatar
+   Profile Page — Firebase user profile
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
 VantagePages.Profile = function Profile({ user, onNavigate, onLogout }) {
   const [stats, setStats] = useState(null);
-  const [avatarUrl, setAvatarUrl] = useState(user ? user.photoURL : null);
-  const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(user ? user.displayName || '' : '');
   const [nameError, setNameError] = useState('');
@@ -21,27 +19,6 @@ VantagePages.Profile = function Profile({ user, onNavigate, onLogout }) {
       setStats(s);
     }).catch(function () {});
   }, [uid]);
-
-  var handleAvatarUpload = async function (ev) {
-    var file = ev.target.files && ev.target.files[0];
-    if (!file || !uid) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File must be under 5MB');
-      return;
-    }
-    setUploading(true);
-    try {
-      var result = await VantageServices.StorageService.uploadAvatar(uid, file);
-      setAvatarUrl(result.url);
-      // Update the auth service's cached user
-      VantageServices.AuthService._currentUser.photoURL = result.url;
-    } catch (err) {
-      console.error('Avatar upload error:', err);
-      alert('Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   var handleNameSave = async function () {
     if (!newName.trim()) { setNameError('Name cannot be empty'); return; }
@@ -61,6 +38,9 @@ VantagePages.Profile = function Profile({ user, onNavigate, onLogout }) {
     ? (VantageEngine.Scoring.getGrade(stats.bestScore) || {}).letter || '—'
     : '—';
 
+  // Generate initials from display name
+  var initials = (profile.displayName || 'O').split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+
   return e('div', { className: 'vpage-profile' },
     e(VantageUI.PageHeader, {
       title: 'Profile',
@@ -71,27 +51,7 @@ VantagePages.Profile = function Profile({ user, onNavigate, onLogout }) {
       // Profile card
       e(VantageUI.Card, { className: 'vprofile-card animate-in' },
         e('div', { className: 'vprofile-avatar' },
-          avatarUrl
-            ? e('img', {
-                src: avatarUrl,
-                alt: 'Avatar',
-                className: 'vavatar-lg',
-                style: { width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' },
-              })
-            : e('div', { className: 'vavatar-lg' }, (profile.displayName || 'O')[0].toUpperCase()),
-          e('label', {
-            className: 'vbtn vbtn-ghost vbtn-sm',
-            style: { cursor: 'pointer', marginTop: '8px', fontSize: '12px' },
-          },
-            uploading ? 'Uploading...' : 'Change Photo',
-            e('input', {
-              type: 'file',
-              accept: 'image/*',
-              style: { display: 'none' },
-              onChange: handleAvatarUpload,
-              disabled: uploading,
-            }),
-          ),
+          e('div', { className: 'vavatar-lg' }, initials),
         ),
 
         editingName

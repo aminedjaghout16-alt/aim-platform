@@ -61,14 +61,7 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
           user
             ? e('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
                 e('div', { className: 'vtopbar-user', onClick: function () { onNavigate('profile'); } },
-                  user.photoURL
-                    ? e('img', {
-                        src: user.photoURL,
-                        alt: user.displayName || 'User',
-                        className: 'vavatar',
-                        style: { width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' },
-                      })
-                    : e('div', { className: 'vavatar' }, (user.displayName || 'O')[0].toUpperCase()),
+                  e('div', { className: 'vavatar' }, (user.displayName || 'O')[0].toUpperCase()),
                   e('span', { className: 'vtopbar-username' }, user.displayName || 'Operator'),
                 ),
                 e('button', {

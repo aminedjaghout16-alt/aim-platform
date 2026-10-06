@@ -16,7 +16,6 @@
     window.VantageApp.firebaseReady = true;
     window.VantageApp.auth = firebase.auth();
     window.VantageApp.db = firebase.firestore();
-    window.VantageApp.storage = firebase.storage();
     console.log('[Firebase] Initialized successfully');
   } catch (err) {
     console.error('[Firebase] Initialization failed:', err);

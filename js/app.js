@@ -8,7 +8,6 @@
   // Initialize services
   VantageServices.AuthService.init();
   VantageServices.DatabaseService.init();
-  VantageServices.StorageService.init();
 
   // Pages that require authentication
   const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'gameplay', 'results', 'stats', 'profile', 'settings'];
