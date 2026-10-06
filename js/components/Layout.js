@@ -3,7 +3,7 @@
    ============================================ */
 window.VantageComponents = window.VantageComponents || {};
 
-VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, user }) {
+VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, user, onLogout }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const navItems = [
@@ -16,7 +16,7 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
 
   return e('div', { className: 'vlayout' },
     // Sidebar
-    e('aside', { className: `vsidebar ${collapsed ? 'vsidebar-collapsed' : ''}` },
+    e('aside', { className: 'vsidebar ' + (collapsed ? 'vsidebar-collapsed' : '') },
       // Logo
       e('div', { className: 'vsidebar-logo' },
         e('div', { className: 'vlogo-mark' },
@@ -27,24 +27,24 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
 
       // Nav items
       e('nav', { className: 'vsidebar-nav' },
-        navItems.map(item =>
-          e('button', {
+        navItems.map(function (item) {
+          return e('button', {
             key: item.id,
-            className: `vnav-item ${currentPage === item.id ? 'vnav-active' : ''}`,
-            onClick: () => onNavigate(item.id),
+            className: 'vnav-item ' + (currentPage === item.id ? 'vnav-active' : ''),
+            onClick: function () { onNavigate(item.id); },
             title: collapsed ? item.label : '',
           },
             e('span', { className: 'vnav-icon' }, item.icon),
             !collapsed && e('span', { className: 'vnav-label' }, item.label),
             !collapsed && currentPage === item.id && e('span', { className: 'vnav-indicator' }),
-          )
-        ),
+          );
+        })
       ),
 
       // Collapse toggle
       e('button', {
         className: 'vsidebar-toggle',
-        onClick: () => setCollapsed(!collapsed),
+        onClick: function () { setCollapsed(!collapsed); },
       }, collapsed ? '›' : '‹'),
     ),
 
@@ -54,18 +54,33 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
       e('header', { className: 'vtopbar' },
         e('div', { className: 'vtopbar-left' },
           e('span', { className: 'vtopbar-page' },
-            navItems.find(n => n.id === currentPage)?.label || 'Vantage'
+            (navItems.find(function (n) { return n.id === currentPage; }) || {}).label || 'Vantage'
           ),
         ),
         e('div', { className: 'vtopbar-right' },
           user
-            ? e('div', { className: 'vtopbar-user', onClick: () => onNavigate('profile') },
-                e('div', { className: 'vavatar' }, (user.displayName || 'O')[0].toUpperCase()),
-                e('span', { className: 'vtopbar-username' }, user.displayName || 'Operator'),
+            ? e('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+                e('div', { className: 'vtopbar-user', onClick: function () { onNavigate('profile'); } },
+                  user.photoURL
+                    ? e('img', {
+                        src: user.photoURL,
+                        alt: user.displayName || 'User',
+                        className: 'vavatar',
+                        style: { width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' },
+                      })
+                    : e('div', { className: 'vavatar' }, (user.displayName || 'O')[0].toUpperCase()),
+                  e('span', { className: 'vtopbar-username' }, user.displayName || 'Operator'),
+                ),
+                e('button', {
+                  className: 'vbtn vbtn-ghost vbtn-sm',
+                  onClick: function () { if (onLogout) onLogout(); },
+                  title: 'Sign Out',
+                  style: { fontSize: '16px', padding: '4px 8px' },
+                }, '⏻'),
               )
             : e(VantageUI.Button, {
                 variant: 'primary', size: 'sm',
-                onClick: () => onNavigate('login'),
+                onClick: function () { onNavigate('login'); },
               }, 'Sign In'),
         ),
       ),

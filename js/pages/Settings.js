@@ -1,9 +1,9 @@
 /* ============================================
-   Settings Page — User preferences
+   Settings Page — Firebase-persisted preferences
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.Settings = function Settings({ onNavigate }) {
+VantagePages.Settings = function Settings({ onNavigate, user, onLogout }) {
   const [settings, setSettings] = useState({
     game: 'valorant',
     sensitivity: 0.35,
@@ -11,14 +11,51 @@ VantagePages.Settings = function Settings({ onNavigate }) {
     soundEnabled: true,
     showFPS: false,
   });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
-  const update = (key, val) => setSettings(prev => ({ ...prev, [key]: val }));
-  const games = VantageEngine.Settings.getAllGames();
+  var uid = user ? user.uid : null;
+
+  // Load settings from Firebase on mount
+  useEffect(function () {
+    if (!uid) { setLoaded(true); return; }
+    VantageServices.DatabaseService.getUserSettings(uid).then(function (s) {
+      if (s && typeof s === 'object' && Object.keys(s).length > 0) {
+        setSettings(function (prev) { return Object.assign({}, prev, s); });
+      }
+      setLoaded(true);
+    }).catch(function () { setLoaded(true); });
+  }, [uid]);
+
+  // Auto-save settings to Firebase when they change (debounced)
+  var saveTimer = null;
+  var update = function (key, val) {
+    setSettings(function (prev) {
+      var next = Object.assign({}, prev);
+      next[key] = val;
+      // Debounced save to Firebase
+      if (uid) {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          setSaving(true);
+          VantageServices.DatabaseService.saveUserSettings(uid, next).then(function () {
+            setSaving(false);
+            setSaveMessage('Saved');
+            setTimeout(function () { setSaveMessage(''); }, 2000);
+          }).catch(function () { setSaving(false); });
+        }, 500);
+      }
+      return next;
+    });
+  };
+
+  var games = VantageEngine.Settings.getAllGames();
 
   return e('div', { className: 'vpage-settings' },
     e(VantageUI.PageHeader, {
       title: 'Settings',
-      subtitle: 'Configure your training preferences',
+      subtitle: saving ? 'Saving...' : saveMessage || 'Configure your training preferences',
     }),
 
     e('div', { className: 'vsettings-grid' },
@@ -28,23 +65,23 @@ VantagePages.Settings = function Settings({ onNavigate }) {
         e(VantageUI.Select, {
           label: 'Primary Game',
           value: settings.game,
-          onChange: (v) => {
-            const game = VantageEngine.Settings.getGame(v);
+          onChange: function (v) {
+            var game = VantageEngine.Settings.getGame(v);
             update('game', v);
             if (game) { update('sensitivity', game.defaultSensitivity); update('dpi', game.defaultDPI); }
           },
-          options: games.map(g => ({ value: g.id, label: g.name })),
+          options: games.map(function (g) { return { value: g.id, label: g.name }; }),
         }),
         e(VantageUI.Slider, {
           label: 'In-Game Sensitivity',
           value: settings.sensitivity,
-          onChange: (v) => update('sensitivity', v),
+          onChange: function (v) { update('sensitivity', v); },
           min: 0.05, max: 20, step: 0.05,
         }),
         e(VantageUI.Slider, {
           label: 'Mouse DPI',
           value: settings.dpi,
-          onChange: (v) => update('dpi', v),
+          onChange: function (v) { update('dpi', v); },
           min: 200, max: 3200, step: 50,
         }),
       ),
@@ -55,15 +92,15 @@ VantagePages.Settings = function Settings({ onNavigate }) {
         e('div', { className: 'vsettings-toggle' },
           e('span', null, 'Sound Effects'),
           e('button', {
-            className: `vtoggle ${settings.soundEnabled ? 'vtoggle-on' : ''}`,
-            onClick: () => update('soundEnabled', !settings.soundEnabled),
+            className: 'vtoggle ' + (settings.soundEnabled ? 'vtoggle-on' : ''),
+            onClick: function () { update('soundEnabled', !settings.soundEnabled); },
           }, e('span', { className: 'vtoggle-knob' })),
         ),
         e('div', { className: 'vsettings-toggle' },
           e('span', null, 'Show FPS Counter'),
           e('button', {
-            className: `vtoggle ${settings.showFPS ? 'vtoggle-on' : ''}`,
-            onClick: () => update('showFPS', !settings.showFPS),
+            className: 'vtoggle ' + (settings.showFPS ? 'vtoggle-on' : ''),
+            onClick: function () { update('showFPS', !settings.showFPS); },
           }, e('span', { className: 'vtoggle-knob' })),
         ),
       ),
@@ -71,10 +108,14 @@ VantagePages.Settings = function Settings({ onNavigate }) {
       // Account
       e(VantageUI.Card, { className: 'vsettings-section animate-in stagger-2' },
         e('h4', { className: 'vsettings-section-title' }, 'ACCOUNT'),
-        e('p', { className: 'text-secondary', style: { marginBottom: '16px' } },
-          'Account management will be available after Firebase integration.'),
-        e(VantageUI.Button, { variant: 'danger', size: 'sm', onClick: () => onNavigate('landing') },
-          'SIGN OUT'),
+        e('p', { className: 'text-secondary', style: { marginBottom: '8px' } },
+          user ? user.email : 'Not signed in'),
+        e('p', { className: 'text-secondary', style: { marginBottom: '16px', fontSize: '12px' } },
+          'Your settings are synced to your account and available on all devices.'),
+        e(VantageUI.Button, {
+          variant: 'danger', size: 'sm',
+          onClick: function () { if (onLogout) onLogout(); },
+        }, 'SIGN OUT'),
       ),
     ),
   );

@@ -211,12 +211,12 @@ VantageEngine.TrainingEngine = class {
       accuracy,
     });
 
-    // Build result
+    // Build result (userId is set by the app layer when saving to Firebase)
     const result = VantageEngine.Scoring.buildResult({
       scenarioId: this.scenario.id,
       config: this.config,
       sessionData: this.sessionData,
-      userId: 'dev-user-001',
+      userId: null,
     });
 
     if (this._onFinish) this._onFinish(result);

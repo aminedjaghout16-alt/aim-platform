@@ -1,38 +1,41 @@
 /* ============================================
-   Results Page — Real session history from saved results
+   Results Page — Firebase session history
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
 VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQuickStart }) {
   const [results, setResults] = useState(null); // null = loading
 
-  const uid = (user && user.uid) || 'dev-user-001';
+  var uid = user ? user.uid : null;
 
-  useEffect(() => {
-    let cancelled = false;
+  useEffect(function () {
+    if (!uid) { setResults([]); return; }
+    var cancelled = false;
     VantageServices.DatabaseService.getUserResults(uid)
-      .then((rows) => {
+      .then(function (rows) {
         if (cancelled) return;
-        const sorted = [...rows].sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+        var sorted = rows.slice().sort(function (a, b) {
+          return new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt);
+        });
         setResults(sorted);
       })
-      .catch(() => { if (!cancelled) setResults([]); });
-    return () => { cancelled = true; };
+      .catch(function () { if (!cancelled) setResults([]); });
+    return function () { cancelled = true; };
   }, [uid]);
 
-  const gradeColor = (g) => {
-    const map = { S: '#ffb830', A: '#00e0d0', B: '#448aff', C: '#b388ff', D: '#ffab00', F: '#ff3d5a' };
+  var gradeColor = function (g) {
+    var map = { S: '#ffb830', A: '#00e0d0', B: '#448aff', C: '#b388ff', D: '#ffab00', F: '#ff3d5a' };
     return map[g] || '#8b8fa3';
   };
 
-  const formatDate = (iso) => {
-    const d = new Date(iso);
+  var formatDate = function (iso) {
+    var d = new Date(iso);
     if (isNaN(d)) return '—';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' +
       d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
-  const header = e(VantageUI.PageHeader, {
+  var header = e(VantageUI.PageHeader, {
     title: 'Results',
     subtitle: 'Your training session history',
   });
@@ -48,18 +51,18 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
         icon: '◎',
         title: 'No sessions yet',
         description: 'Finish a training session and your results will show up here.',
-        action: e(VantageUI.Button, { variant: 'primary', onClick: () => onNavigate('training') }, 'GO TO TRAINING'),
+        action: e(VantageUI.Button, { variant: 'primary', onClick: function () { onNavigate('training'); } }, 'GO TO TRAINING'),
       }),
     );
   }
 
-  const agg = VantageEngine.Scoring.aggregateStats(results);
+  var agg = VantageEngine.Scoring.aggregateStats(results);
 
   return e('div', { className: 'vpage-results' },
     e(VantageUI.PageHeader, {
       title: 'Results',
       subtitle: 'Your training session history',
-      action: e(VantageUI.Button, { variant: 'primary', onClick: () => onNavigate('training') }, 'TRAIN AGAIN'),
+      action: e(VantageUI.Button, { variant: 'primary', onClick: function () { onNavigate('training'); } }, 'TRAIN AGAIN'),
     }),
 
     // Summary stats (computed from saved sessions)
@@ -69,11 +72,11 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
         { label: 'Average Score', value: agg.averageScore, icon: '◈', color: 'var(--accent-secondary)' },
         { label: 'Best Score', value: agg.bestScore, icon: '△', color: 'var(--success)' },
         { label: 'Avg Accuracy', value: agg.averageAccuracy + '%', icon: '⟶', color: 'var(--info)' },
-      ].map((s, i) =>
-        e('div', { key: i, className: `animate-in stagger-${i + 1}` },
+      ].map(function (s, i) {
+        return e('div', { key: i, className: 'animate-in stagger-' + (i + 1) },
           e(VantageUI.StatCard, s),
-        )
-      ),
+        );
+      })
     ),
 
     // Results table
@@ -88,11 +91,11 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
           e('span', null, 'Hits'),
           e('span', null, 'Date'),
         ),
-        results.map(r => {
-          const sc = VantageEngine.Scenarios.getById(r.scenarioId);
-          const st = r.stats || {};
-          const isLatest = r.id === latestResultId;
-          return e('div', { key: r.id, className: `vresults-table-row ${isLatest ? 'vresults-table-row-latest' : ''}` },
+        results.map(function (r) {
+          var sc = VantageEngine.Scenarios.getById(r.scenarioId);
+          var st = r.stats || {};
+          var isLatest = r.id === latestResultId;
+          return e('div', { key: r.id, className: 'vresults-table-row ' + (isLatest ? 'vresults-table-row-latest' : '') },
             e('span', { className: 'vresults-table-scenario' },
               e('span', { className: 'vresult-icon' }, '◎'),
               sc ? sc.name : r.scenarioId,

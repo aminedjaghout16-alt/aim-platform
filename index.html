@@ -16,14 +16,24 @@
 
   <!-- Three.js -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Firebase SDK (compat version for script-tag usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 </head>
 <body>
   <div id="root"></div>
 
+  <!-- Firebase Config -->
+  <script src="js/firebase-config.js?v=1"></script>
+  <script src="js/firebase-init.js?v=1"></script>
+
   <!-- Services -->
-  <script src="js/services/authService.js?v=3"></script>
-  <script src="js/services/databaseService.js?v=3"></script>
-  <script src="js/services/storageService.js?v=3"></script>
+  <script src="js/services/authService.js?v=1"></script>
+  <script src="js/services/databaseService.js?v=1"></script>
+  <script src="js/services/storageService.js?v=1"></script>
 
   <!-- Engine -->
   <script src="js/engine/categories.js?v=3"></script>
@@ -44,19 +54,19 @@
 
   <!-- Pages -->
   <script src="js/pages/Landing.js?v=3"></script>
-  <script src="js/pages/Dashboard.js?v=3"></script>
+  <script src="js/pages/Dashboard.js?v=1"></script>
   <script src="js/pages/TrainingLibrary.js?v=3"></script>
   <script src="js/pages/TrainingDetails.js?v=3"></script>
   <script src="js/pages/TrainingSetup.js?v=3"></script>
   <script src="js/pages/TrainingGameplay.js?v=4"></script>
-  <script src="js/pages/Results.js?v=3"></script>
-  <script src="js/pages/Statistics.js?v=3"></script>
-  <script src="js/pages/Profile.js?v=3"></script>
-  <script src="js/pages/Settings.js?v=3"></script>
-  <script src="js/pages/Login.js?v=3"></script>
-  <script src="js/pages/Register.js?v=3"></script>
+  <script src="js/pages/Results.js?v=1"></script>
+  <script src="js/pages/Statistics.js?v=1"></script>
+  <script src="js/pages/Profile.js?v=1"></script>
+  <script src="js/pages/Settings.js?v=1"></script>
+  <script src="js/pages/Login.js?v=1"></script>
+  <script src="js/pages/Register.js?v=1"></script>
 
   <!-- App -->
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=1"></script>
 </body>
 </html>

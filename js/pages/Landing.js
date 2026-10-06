@@ -3,7 +3,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.Landing = function Landing({ onNavigate }) {
+VantagePages.Landing = function Landing({ onNavigate, user }) {
   return e('div', { className: 'vlanding' },
     // Hero section
     e('section', { className: 'vlanding-hero' },
@@ -19,14 +19,21 @@ VantagePages.Landing = function Landing({ onNavigate }) {
           'Built for Valorant, CS2, and beyond. Train smarter, not harder.'
         ),
         e('div', { className: 'vlanding-actions animate-in stagger-3' },
-          e(VantageUI.Button, {
-            variant: 'primary', size: 'lg',
-            onClick: () => onNavigate('register'),
-          }, 'START TRAINING'),
-          e(VantageUI.Button, {
-            variant: 'ghost', size: 'lg',
-            onClick: () => onNavigate('login'),
-          }, 'SIGN IN'),
+          user
+            ? e(VantageUI.Button, {
+                variant: 'primary', size: 'lg',
+                onClick: function () { onNavigate('dashboard'); },
+              }, 'GO TO DASHBOARD')
+            : e(React.Fragment, null,
+                e(VantageUI.Button, {
+                  variant: 'primary', size: 'lg',
+                  onClick: function () { onNavigate('register'); },
+                }, 'START TRAINING'),
+                e(VantageUI.Button, {
+                  variant: 'ghost', size: 'lg',
+                  onClick: function () { onNavigate('login'); },
+                }, 'SIGN IN'),
+              ),
         ),
         e('div', { className: 'vlanding-stats animate-in stagger-4' },
           e('div', { className: 'vlanding-stat' },
@@ -56,13 +63,13 @@ VantagePages.Landing = function Landing({ onNavigate }) {
           { icon: '◈', title: 'Deep Analytics', desc: 'Track your progress with detailed statistics and performance insights.' },
           { icon: '⟶', title: 'Game-Specific', desc: 'Sensitivity mapping and scenarios tailored for your main game.' },
           { icon: '◇', title: 'Adaptive Difficulty', desc: 'Training that scales with your skill level automatically.' },
-        ].map((f, i) =>
-          e(VantageUI.Card, { key: i, className: `vfeature-card animate-in stagger-${i + 1}`, hover: true },
+        ].map(function (f, i) {
+          return e(VantageUI.Card, { key: i, className: 'vfeature-card animate-in stagger-' + (i + 1), hover: true },
             e('div', { className: 'vfeature-icon' }, f.icon),
             e('h3', null, f.title),
             e('p', null, f.desc),
-          )
-        ),
+          );
+        })
       ),
     ),
 

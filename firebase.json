@@ -1,8 +1,9 @@
 {
   "firestore": {
-    "database": "(default)",
-    "location": "europe-southwest1",
-    "rules": "n",
-    "indexes": "n"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }
