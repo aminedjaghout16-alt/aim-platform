@@ -241,8 +241,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const h = wrapper.clientHeight || window.innerHeight;
 
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x080a10);
-    this._scene.fog = new THREE.Fog(0x080a10, 25, 55);
+    this._scene.background = new THREE.Color(0x0c0f16);
+    this._scene.fog = new THREE.Fog(0x0c0f16, 25, 55);
 
     this._camera = new THREE.PerspectiveCamera(this._fov, w / h, 0.1, 100);
     this._camera.position.set(0, 1.7, 0);
@@ -274,7 +274,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // --- Floor with subtle gradient ---
     const floorGeo = new THREE.PlaneGeometry(40, 40, 20, 20);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x0e1018,
+      color: 0x141820,
       roughness: 0.75,
       metalness: 0.25,
     });
@@ -304,7 +304,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
     // --- Walls with subtle panel lines ---
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x10131c,
+      color: 0x161a24,
       roughness: 0.85,
       metalness: 0.15,
     });
@@ -344,7 +344,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // --- Ceiling ---
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x0a0c12, roughness: 1.0 });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x10131a, roughness: 1.0 });
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = wallH;
@@ -394,38 +394,38 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // --- Lighting (improved) ---
-    const ambient = new THREE.AmbientLight(0x404860, 0.8);
+    const ambient = new THREE.AmbientLight(0x404860, 1.1);
     this._scene.add(ambient);
 
-    const mainLight = new THREE.DirectionalLight(0xd0e8ff, 1.1);
+    const mainLight = new THREE.DirectionalLight(0xd0e8ff, 1.35);
     mainLight.position.set(2, 8, 3);
     this._scene.add(mainLight);
 
     // Teal accent lights (brighter)
-    const accent1 = new THREE.PointLight(0x00e0d0, 0.9, 35);
+    const accent1 = new THREE.PointLight(0x00e0d0, 1.1, 35);
     accent1.position.set(-10, 3.5, -10);
     this._scene.add(accent1);
 
-    const accent2 = new THREE.PointLight(0x00e0d0, 0.7, 35);
+    const accent2 = new THREE.PointLight(0x00e0d0, 0.9, 35);
     accent2.position.set(10, 3.5, 10);
     this._scene.add(accent2);
 
     // Additional corner accents
-    const accent3 = new THREE.PointLight(0x00e0d0, 0.4, 25);
+    const accent3 = new THREE.PointLight(0x00e0d0, 0.55, 25);
     accent3.position.set(-10, 2, 10);
     this._scene.add(accent3);
 
-    const accent4 = new THREE.PointLight(0x00e0d0, 0.4, 25);
+    const accent4 = new THREE.PointLight(0x00e0d0, 0.55, 25);
     accent4.position.set(10, 2, -10);
     this._scene.add(accent4);
 
     // Warm fill (improved)
-    const fill = new THREE.PointLight(0xffb830, 0.3, 40);
+    const fill = new THREE.PointLight(0xffb830, 0.45, 40);
     fill.position.set(0, 4, -15);
     this._scene.add(fill);
 
     // Overhead center light
-    const overhead = new THREE.PointLight(0xffffff, 0.2, 20);
+    const overhead = new THREE.PointLight(0xffffff, 0.35, 20);
     overhead.position.set(0, 5, 0);
     this._scene.add(overhead);
 
