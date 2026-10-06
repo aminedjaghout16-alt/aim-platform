@@ -242,9 +242,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
     this._scene = new THREE.Scene();
     this._scene.background = new THREE.Color(0x10141c);
-    this._scene.fog = new THREE.Fog(0x10141c, 28, 58);
+    this._scene.fog = new THREE.Fog(0x10141c, 45, 90);
 
-    this._camera = new THREE.PerspectiveCamera(this._fov, w / h, 0.1, 100);
+    this._camera = new THREE.PerspectiveCamera(this._fov, w / h, 0.1, 120);
     this._camera.position.set(0, 1.7, 0);
     this._camera.rotation.order = 'YXZ';
 
@@ -274,7 +274,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // --- Floor with subtle gradient ---
     const floorGeo = new THREE.PlaneGeometry(40, 40, 20, 20);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1f2a,
+      color: 0x242b3a,
       roughness: 0.7,
       metalness: 0.2,
     });
@@ -283,9 +283,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     arena.add(floor);
 
     // Floor grid with better visibility
-    const gridHelper = new THREE.GridHelper(40, 40, 0x2a3048, 0x1e2432);
+    const gridHelper = new THREE.GridHelper(40, 40, 0x4a5a80, 0x2e3850);
     gridHelper.position.y = 0.01;
-    gridHelper.material.opacity = 0.55;
+    gridHelper.material.opacity = 0.8;
     gridHelper.material.transparent = true;
     arena.add(gridHelper);
 
@@ -294,7 +294,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const innerZoneMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
-      opacity: 0.15,
+      opacity: 0.4,
       side: THREE.DoubleSide,
     });
     const innerZone = new THREE.Mesh(innerZoneGeo, innerZoneMat);
@@ -304,9 +304,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
     // --- Walls with subtle panel lines ---
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x1e2430,
-      roughness: 0.8,
-      metalness: 0.15,
+      color: 0x3a4660,
+      roughness: 0.85,
+      metalness: 0.1,
     });
     const wallH = 6;
     const half = 20;
@@ -325,12 +325,12 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
       // Wall panel accent lines
       const panelLineMat = new THREE.MeshBasicMaterial({
-        color: 0x252a3a,
+        color: 0x8fa4cc,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.55,
       });
       for (let i = -15; i <= 15; i += 10) {
-        const lineGeo = new THREE.PlaneGeometry(0.02, wallH);
+        const lineGeo = new THREE.PlaneGeometry(0.08, wallH);
         const line = new THREE.Mesh(lineGeo, panelLineMat);
         if (cfg.ry === 0 || Math.abs(cfg.ry) === Math.PI) {
           line.position.set(i, wallH / 2, cfg.pos[2] + (cfg.ry === 0 ? 0.01 : -0.01));
@@ -344,15 +344,15 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // --- Ceiling ---
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x161a24, roughness: 0.95 });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 0.95 });
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = wallH;
     arena.add(ceiling);
 
     // --- Accent trim lines (improved) ---
-    const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.4 });
-    const trimGeo = new THREE.PlaneGeometry(40, 0.05);
+    const trimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.85 });
+    const trimGeo = new THREE.PlaneGeometry(40, 0.12);
     const trimPositions = [
       { pos: [0, 1.0, -half + 0.02], ry: 0 },
       { pos: [0, 1.0, half - 0.02], ry: Math.PI },
@@ -365,7 +365,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // Side trims
-    const sideTrimGeo = new THREE.PlaneGeometry(40, 0.05);
+    const sideTrimGeo = new THREE.PlaneGeometry(40, 0.12);
     const sideTrims = [
       { pos: [-half + 0.02, 1.0, 0], ry: Math.PI / 2 },
       { pos: [half - 0.02, 1.0, 0], ry: -Math.PI / 2 },
@@ -378,8 +378,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // Upper trim lines
-    const upperTrimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.2 });
-    const upperTrimGeo = new THREE.PlaneGeometry(40, 0.03);
+    const upperTrimMat = new THREE.MeshBasicMaterial({ color: 0x00e0d0, transparent: true, opacity: 0.6 });
+    const upperTrimGeo = new THREE.PlaneGeometry(40, 0.08);
     const upperTrims = [
       { pos: [0, wallH - 0.5, -half + 0.02], ry: 0 },
       { pos: [0, wallH - 0.5, half - 0.02], ry: Math.PI },
@@ -393,8 +393,23 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       arena.add(trim);
     }
 
+    // --- Crisp edge outlines: floor/ceiling seams + vertical corners ---
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x9fe8ff });
+    const edgePts = [];
+    const corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
+    for (let i = 0; i < 4; i++) {
+      const [x1, z1] = corners[i];
+      const [x2, z2] = corners[(i + 1) % 4];
+      edgePts.push(x1, 0.03, z1, x2, 0.03, z2);           // floor seam
+      edgePts.push(x1, wallH, z1, x2, wallH, z2);         // ceiling seam
+      edgePts.push(x1, 0, z1, x1, wallH, z1);             // vertical corner
+    }
+    const edgeGeo = new THREE.BufferGeometry();
+    edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePts, 3));
+    arena.add(new THREE.LineSegments(edgeGeo, edgeMat));
+
     // --- Lighting (improved) ---
-    const ambient = new THREE.AmbientLight(0x505870, 1.5);
+    const ambient = new THREE.AmbientLight(0x7080a8, 2.0);
     this._scene.add(ambient);
 
     const mainLight = new THREE.DirectionalLight(0xd0e8ff, 1.7);
@@ -441,7 +456,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // --- Decorative pillars (improved) ---
     const pillarGeo = new THREE.BoxGeometry(0.6, wallH, 0.6);
     const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0x1e2230,
+      color: 0x4a5878,
       roughness: 0.55,
       metalness: 0.35,
     });
@@ -453,13 +468,16 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
       pillar.position.set(...pp);
       arena.add(pillar);
+      const pillarEdges = new THREE.LineSegments(new THREE.EdgesGeometry(pillarGeo), edgeMat);
+      pillarEdges.position.set(...pp);
+      arena.add(pillarEdges);
 
       // Pillar accent strip
       const stripGeo = new THREE.BoxGeometry(0.05, wallH, 0.62);
       const stripMat = new THREE.MeshBasicMaterial({
         color: 0x00e0d0,
         transparent: true,
-        opacity: 0.25,
+        opacity: 0.6,
       });
       const strip = new THREE.Mesh(stripGeo, stripMat);
       strip.position.set(pp[0], pp[1], pp[2]);
@@ -470,7 +488,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const markerMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
-      opacity: 0.12,
+      opacity: 0.3,
     });
     const markerGeo = new THREE.CircleGeometry(1.2, 32);
     const markerPositions = [
@@ -496,7 +514,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const distMarkerMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.25,
     });
     const distances = [5, 10, 15];
     for (const dist of distances) {
@@ -935,7 +953,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     targetMesh.add(core);
 
     // Outer ring (billboard) - improved
-    const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.6, 32);
+    const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
@@ -946,7 +964,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     targetMesh.add(ring);
 
     // Secondary inner ring for depth
-    const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.8, 24);
+    const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
     const innerRingMat = new THREE.MeshBasicMaterial({
       color: 0x00e0d0,
       transparent: true,
@@ -1261,8 +1279,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
         const easedOpacity = t.opacity < 1 ? 1 - Math.pow(1 - t.opacity, 3) : 1;
         t.mesh.material.opacity = easedOpacity;
         t.core.material.opacity = easedOpacity * 0.9;
-        t.ring.material.opacity = easedOpacity * 0.25;
-        if (t.innerRing) t.innerRing.material.opacity = easedOpacity * 0.15;
+        t.ring.material.opacity = easedOpacity * 0.7;
+        if (t.innerRing) t.innerRing.material.opacity = easedOpacity * 0.5;
 
         // Billboard the rings to face camera (in world space)
         const camPos = this._camera.position.clone();
@@ -1311,8 +1329,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
             t.mesh.material.color.setHex(0x00e0d0);
           }
           t.core.material.opacity = t.hitAnim * 0.5;
-          t.ring.material.opacity = t.hitAnim * 0.2;
-          if (t.innerRing) t.innerRing.material.opacity = t.hitAnim * 0.1;
+          t.ring.material.opacity = t.hitAnim * 0.5;
+          if (t.innerRing) t.innerRing.material.opacity = t.hitAnim * 0.35;
         }
       }
     }
