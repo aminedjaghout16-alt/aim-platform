@@ -266,17 +266,231 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._scene.add(this._arenaGroup);
   }
 
+  /* ---------- Procedural textures (no external assets) ---------- */
+
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  _makeTexture(w, h, repX, repY, draw) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    draw(c.getContext('2d'), w, h);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repX, repY);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(8, this._renderer3d.capabilities.getMaxAnisotropy());
+    return tex;
+  }
+
+  _concreteBase(g, w, h, base, rnd, blotches, blotchAlpha, grain) {
+    g.fillStyle = base;
+    g.fillRect(0, 0, w, h);
+    // soft blotches (drawn wrapped so tiles repeat without a hard seam)
+    for (let i = 0; i < blotches; i++) {
+      const x = rnd() * w, y = rnd() * h, r = 40 + rnd() * 160;
+      const dark = rnd() < 0.55;
+      const a = 0.03 + rnd() * blotchAlpha;
+      for (const dx of [-w, 0, w]) {
+        for (const dy of [-h, 0, h]) {
+          const grd = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+          grd.addColorStop(0, dark ? 'rgba(30,28,25,' + a + ')' : 'rgba(255,252,245,' + a + ')');
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grd;
+          g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+        }
+      }
+    }
+    // fine grain / pores
+    for (let i = 0; i < grain; i++) {
+      const x = rnd() * w, y = rnd() * h, sz = rnd() < 0.85 ? 1 : 2;
+      g.fillStyle = rnd() < 0.5
+        ? 'rgba(20,18,15,' + (0.05 + rnd() * 0.12) + ')'
+        : 'rgba(255,255,250,' + (0.04 + rnd() * 0.1) + ')';
+      g.fillRect(x, y, sz, sz);
+    }
+  }
+
+  _makeArenaTextures() {
+    const T = {};
+
+    // Wall: concrete panels (8m x 6m per tile) with seams, tie holes, stains, dark lower band
+    T.wall = this._makeTexture(1024, 768, 5, 1, (g, w, h) => {
+      const rnd = this._rng(11);
+      this._concreteBase(g, w, h, '#b8b5ae', rnd, 45, 0.08, 9000);
+      for (let i = 0; i < 14; i++) {            // vertical water streaks
+        const x = rnd() * w, len = 120 + rnd() * 340, wd = 6 + rnd() * 18;
+        const grd = g.createLinearGradient(0, 0, 0, len);
+        grd.addColorStop(0, 'rgba(40,36,30,' + (0.05 + rnd() * 0.06) + ')');
+        grd.addColorStop(1, 'rgba(40,36,30,0)');
+        g.fillStyle = grd;
+        g.fillRect(x, 0, wd, len);
+      }
+      const bandH = 140, bandY = h - bandH;     // darker protective lower band
+      g.fillStyle = 'rgba(70,64,56,0.30)';
+      g.fillRect(0, bandY, w, bandH);
+      g.fillStyle = 'rgba(255,255,255,0.20)';
+      g.fillRect(0, bandY - 2, w, 2);
+      g.fillStyle = 'rgba(0,0,0,0.28)';
+      g.fillRect(0, bandY, w, 3);
+      g.fillStyle = 'rgba(0,0,0,0.22)';          // mid horizontal joint
+      g.fillRect(0, Math.floor(h * 0.45), w, 2);
+      g.fillStyle = 'rgba(255,255,255,0.14)';
+      g.fillRect(0, Math.floor(h * 0.45) + 2, w, 1);
+      g.fillStyle = 'rgba(0,0,0,0.32)';          // vertical panel seam (tile edge)
+      g.fillRect(0, 0, 4, h);
+      g.fillStyle = 'rgba(255,255,255,0.16)';
+      g.fillRect(4, 0, 2, h);
+      for (const px of [w * 0.25, w * 0.75]) {   // tie holes
+        for (const py of [h * 0.22, h * 0.68]) {
+          g.fillStyle = 'rgba(255,255,255,0.18)';
+          g.beginPath(); g.arc(px, py + 1, 6, 0, Math.PI * 2); g.fill();
+          g.fillStyle = 'rgba(25,22,20,0.6)';
+          g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fill();
+        }
+      }
+    });
+
+    // Floor: polished concrete slabs (4m) with control joints, scuffs, oil stains, hairline cracks
+    T.floor = this._makeTexture(1024, 1024, 10, 10, (g, w, h) => {
+      const rnd = this._rng(23);
+      this._concreteBase(g, w, h, '#76716a', rnd, 60, 0.1, 22000);
+      for (let i = 0; i < 3; i++) {              // oil stains
+        const x = rnd() * w, y = rnd() * h, r = 50 + rnd() * 70;
+        const grd = g.createRadialGradient(x, y, 0, x, y, r);
+        grd.addColorStop(0, 'rgba(15,14,12,0.28)');
+        grd.addColorStop(1, 'rgba(15,14,12,0)');
+        g.fillStyle = grd;
+        g.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      g.lineCap = 'round';
+      for (let i = 0; i < 26; i++) {             // scuffs
+        const x = rnd() * w, y = rnd() * h, len = 60 + rnd() * 110, ang = rnd() * Math.PI;
+        g.strokeStyle = 'rgba(20,18,16,' + (0.07 + rnd() * 0.08) + ')';
+        g.lineWidth = 2 + rnd() * 4;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.quadraticCurveTo(x + Math.cos(ang) * len * 0.5 + 12, y + Math.sin(ang) * len * 0.5 - 12, x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+        g.stroke();
+      }
+      g.lineWidth = 1.2;                         // hairline cracks
+      for (let i = 0; i < 4; i++) {
+        let x = rnd() * w, y = rnd() * h;
+        g.strokeStyle = 'rgba(15,14,12,0.28)';
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let k = 0; k < 8; k++) { x += (rnd() - 0.3) * 40; y += (rnd() - 0.5) * 40; g.lineTo(x, y); }
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(10,9,8,0.45)';         // control joints on slab edges
+      g.fillRect(0, 0, w, 3); g.fillRect(0, 0, 3, h);
+      g.fillStyle = 'rgba(255,255,255,0.12)';
+      g.fillRect(0, 3, w, 2); g.fillRect(3, 0, 2, h);
+    });
+
+    // Ceiling: acoustic tiles (2m) with perforations and light T-bar grid
+    T.ceil = this._makeTexture(512, 512, 20, 20, (g, w, h) => {
+      const rnd = this._rng(37);
+      g.fillStyle = '#c3c0b9';
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 4000; i++) {
+        g.fillStyle = 'rgba(30,28,25,' + (0.03 + rnd() * 0.06) + ')';
+        g.fillRect(rnd() * w, rnd() * h, 1, 1);
+      }
+      g.fillStyle = 'rgba(40,38,34,0.16)';        // perforations
+      for (let y = 20; y < h - 10; y += 16) {
+        for (let x = 20; x < w - 10; x += 16) { g.beginPath(); g.arc(x, y, 1.1, 0, Math.PI * 2); g.fill(); }
+      }
+      g.fillStyle = '#8e8b84'; g.fillRect(0, 0, w, 9); g.fillRect(0, 0, 9, h);
+      g.fillStyle = '#dcdad3'; g.fillRect(0, 0, w, 6); g.fillRect(0, 0, 6, h);
+    });
+
+    // Pillar concrete
+    T.pillar = this._makeTexture(256, 512, 1, 3, (g, w, h) => {
+      const rnd = this._rng(53);
+      this._concreteBase(g, w, h, '#a09d96', rnd, 20, 0.08, 5000);
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.fillRect(0, Math.floor(h / 2), w, 2);
+    });
+
+    // Acoustic foam pyramids
+    T.foam = this._makeTexture(256, 256, 1, 1, (g, w, h) => {
+      const cell = 64;
+      const shades = ['#3a3b3e', '#2a2b2d', '#1d1e20', '#303134'];
+      for (let cy = 0; cy < h; cy += cell) {
+        for (let cx = 0; cx < w; cx += cell) {
+          const mx = cx + cell / 2, my = cy + cell / 2;
+          const corners = [[cx, cy], [cx + cell, cy], [cx + cell, cy + cell], [cx, cy + cell]];
+          for (let k = 0; k < 4; k++) {
+            g.fillStyle = shades[k];
+            g.beginPath();
+            g.moveTo(corners[k][0], corners[k][1]);
+            g.lineTo(corners[(k + 1) % 4][0], corners[(k + 1) % 4][1]);
+            g.lineTo(mx, my);
+            g.closePath();
+            g.fill();
+          }
+        }
+      }
+    });
+
+    // Yellow/black hazard stripes
+    T.hazard = this._makeTexture(128, 128, 1, 1, (g, w, h) => {
+      g.fillStyle = '#1a1a1a';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#d9b310';
+      for (let i = -w; i < w * 2; i += 32) {
+        g.beginPath();
+        g.moveTo(i, 0); g.lineTo(i + 16, 0); g.lineTo(i + 16 - h, h); g.lineTo(i - h, h);
+        g.closePath();
+        g.fill();
+      }
+    });
+
+    // Vent grille
+    T.vent = this._makeTexture(128, 96, 1, 1, (g, w, h) => {
+      g.fillStyle = '#9a9c9e'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#2c2e30'; g.fillRect(8, 8, w - 16, h - 16);
+      for (let y = 12; y < h - 10; y += 10) {
+        g.fillStyle = '#7d8083'; g.fillRect(8, y, w - 16, 5);
+        g.fillStyle = '#b4b6b8'; g.fillRect(8, y, w - 16, 1);
+      }
+    });
+
+    // EXIT sign
+    T.exit = this._makeTexture(128, 48, 1, 1, (g, w, h) => {
+      g.fillStyle = '#1f9d55'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.strokeRect(3, 3, w - 6, h - 6);
+      g.fillStyle = '#ffffff';
+      g.font = 'bold 30px Arial, sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('EXIT', w / 2, h / 2 + 2);
+    });
+
+    return T;
+  }
+
   /* ---------- Arena Construction ---------- */
 
   _buildArena() {
     const arena = this._arenaGroup;
+    const tex = this._makeArenaTextures();
 
     // --- Floor with subtle gradient ---
     const floorGeo = new THREE.PlaneGeometry(40, 40, 20, 20);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x6a6660,
-      roughness: 0.7,
-      metalness: 0.2,
+      color: 0xffffff,
+      map: tex.floor,
+      roughness: 0.6,
+      metalness: 0.05,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -284,9 +498,10 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
     // --- Walls ---
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0xb8b5ae,
-      roughness: 0.85,
-      metalness: 0.1,
+      color: 0xffffff,
+      map: tex.wall,
+      roughness: 0.9,
+      metalness: 0.0,
     });
     const wallH = 6;
     const half = 20;
@@ -306,7 +521,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
 
     // --- Ceiling ---
-    const ceilMat = new THREE.MeshBasicMaterial({ color: 0xb0ada6 });
+    const ceilMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: tex.ceil });
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = wallH;
@@ -372,12 +587,15 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     fillRight.position.set(15, 3, 0);
     this._scene.add(fillRight);
 
+    const concreteDark = new THREE.MeshStandardMaterial({ color: 0x3a3834, roughness: 0.9, metalness: 0.0 });
+
     // --- Decorative pillars (improved) ---
     const pillarGeo = new THREE.BoxGeometry(0.6, wallH, 0.6);
     const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0xa09d96,
-      roughness: 0.55,
-      metalness: 0.35,
+      color: 0xffffff,
+      map: tex.pillar,
+      roughness: 0.85,
+      metalness: 0.0,
     });
     const pillarPos = [
       [-12, wallH / 2, -12], [12, wallH / 2, -12],
@@ -387,6 +605,139 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
       pillar.position.set(...pp);
       arena.add(pillar);
+      // Hazard-stripe guard + base plate + cap
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.64, 1.1, 0.64),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex.hazard, roughness: 0.7, metalness: 0.0 })
+      );
+      guard.position.set(pp[0], 0.7, pp[2]);
+      arena.add(guard);
+      const basePlate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.8), concreteDark);
+      basePlate.position.set(pp[0], 0.075, pp[2]);
+      arena.add(basePlate);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.18, 0.76), concreteDark);
+      cap.position.set(pp[0], wallH - 0.09, pp[2]);
+      arena.add(cap);
+    }
+
+    // ===== Extra realism details =====
+    // Rubber shooting mat under the player
+    const mat = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.4, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x2b2b2d, roughness: 0.95, metalness: 0.0 })
+    );
+    mat.rotation.x = -Math.PI / 2;
+    mat.position.y = 0.012;
+    arena.add(mat);
+
+    // Baseboards
+    const bbGeo = new THREE.BoxGeometry(40, 0.25, 0.08);
+    for (const b of [
+      { pos: [0, 0.125, -half + 0.04], ry: 0 },
+      { pos: [0, 0.125, half - 0.04], ry: 0 },
+      { pos: [-half + 0.04, 0.125, 0], ry: Math.PI / 2 },
+      { pos: [half - 0.04, 0.125, 0], ry: Math.PI / 2 },
+    ]) {
+      const bb = new THREE.Mesh(bbGeo, concreteDark);
+      bb.position.set(...b.pos);
+      bb.rotation.y = b.ry;
+      arena.add(bb);
+    }
+
+    // Acoustic foam panels on the back wall
+    const foamMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex.foam, roughness: 1.0, metalness: 0.0 });
+    const foamGeo = new THREE.BoxGeometry(1.5, 1.5, 0.12);
+    for (let x = -9; x <= 9; x += 1.5) {
+      for (const y of [2.0, 3.5]) {
+        const f = new THREE.Mesh(foamGeo, foamMat);
+        f.position.set(x, y, -half + 0.06);
+        arena.add(f);
+      }
+    }
+
+    // Ceiling light panels (3 x 3)
+    const lightFrameMat = new THREE.MeshStandardMaterial({ color: 0x8a8c90, roughness: 0.6, metalness: 0.1 });
+    const lightPanelMat = new THREE.MeshBasicMaterial({ color: 0xfff6e2 });
+    for (const lx of [-9, 0, 9]) {
+      for (const lz of [-9, 0, 9]) {
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.3), lightFrameMat);
+        frame.position.set(lx, wallH - 0.05, lz);
+        arena.add(frame);
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.1), lightPanelMat);
+        panel.rotation.x = Math.PI / 2;
+        panel.position.set(lx, wallH - 0.106, lz);
+        arena.add(panel);
+      }
+    }
+
+    // Ventilation duct along the back wall (with seam bands)
+    const ductMat = new THREE.MeshStandardMaterial({ color: 0x9a9ea3, roughness: 0.45, metalness: 0.1 });
+    const duct = new THREE.Mesh(new THREE.BoxGeometry(40, 0.6, 0.7), ductMat);
+    duct.position.set(0, 5.3, -half + 0.35);
+    arena.add(duct);
+    const bandGeo = new THREE.BoxGeometry(0.06, 0.64, 0.74);
+    for (let x = -18; x <= 18; x += 4) {
+      const band = new THREE.Mesh(bandGeo, concreteDark);
+      band.position.set(x, 5.3, -half + 0.35);
+      arena.add(band);
+    }
+
+    // Pipes along the side walls (grey left, red fire line right) with brackets
+    const pipeGeo = new THREE.CylinderGeometry(0.07, 0.07, 40, 12);
+    const bracketGeo = new THREE.BoxGeometry(0.14, 0.2, 0.14);
+    for (const side of [-1, 1]) {
+      const pipeMat = new THREE.MeshStandardMaterial({
+        color: side < 0 ? 0x6b7078 : 0x9c2f2a, roughness: 0.5, metalness: 0.15,
+      });
+      const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+      pipe.rotation.x = Math.PI / 2;
+      pipe.position.set(side * (half - 0.25), 4.6, 0);
+      arena.add(pipe);
+      for (let z = -17.5; z <= 17.5; z += 5) {
+        const br = new THREE.Mesh(bracketGeo, concreteDark);
+        br.position.set(side * (half - 0.18), 4.6, z);
+        arena.add(br);
+      }
+    }
+
+    // Vents + exit signs
+    const ventMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex.vent, roughness: 0.6, metalness: 0.1 });
+    const ventGeo = new THREE.PlaneGeometry(0.9, 0.7);
+    const exitMat = new THREE.MeshBasicMaterial({ map: tex.exit });
+    const exitGeo = new THREE.PlaneGeometry(0.7, 0.26);
+    const wallPlace = (obj, wallIdx, along, y) => {
+      const o = 0.03;
+      if (wallIdx === 0) { obj.position.set(along, y, -half + o); obj.rotation.y = 0; }
+      if (wallIdx === 1) { obj.position.set(along, y, half - o); obj.rotation.y = Math.PI; }
+      if (wallIdx === 2) { obj.position.set(-half + o, y, along); obj.rotation.y = Math.PI / 2; }
+      if (wallIdx === 3) { obj.position.set(half - o, y, along); obj.rotation.y = -Math.PI / 2; }
+      arena.add(obj);
+    };
+    for (const [wi, al] of [[0, -14], [0, 14], [2, -10], [2, 10], [3, -10], [3, 10], [1, -10], [1, 10]]) {
+      wallPlace(new THREE.Mesh(ventGeo, ventMat), wi, al, 3.9);
+    }
+    for (const [wi, al] of [[0, 17], [1, -15], [2, 15], [3, -16]]) {
+      wallPlace(new THREE.Mesh(exitGeo, exitMat), wi, al, 4.2);
+    }
+
+    // Fire extinguishers on the walls
+    const extMat = new THREE.MeshStandardMaterial({ color: 0xb3261e, roughness: 0.4, metalness: 0.2 });
+    const extGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.45, 12);
+    const extTopGeo = new THREE.BoxGeometry(0.08, 0.08, 0.12);
+    for (const [wi, al] of [[2, -6], [3, 7], [1, 4]]) {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(extGeo, extMat);
+      body.position.y = 0.225;
+      group.add(body);
+      const top = new THREE.Mesh(extTopGeo, concreteDark);
+      top.position.y = 0.5;
+      group.add(top);
+      group.position.y = 0.95;
+      const o = 0.12;
+      if (wi === 1) group.position.set(al, 0.95, half - o);
+      if (wi === 2) group.position.set(-half + o, 0.95, al);
+      if (wi === 3) group.position.set(half - o, 0.95, al);
+      arena.add(group);
     }
   }
 
@@ -809,8 +1160,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Target sphere with improved materials
     const targetGeo = new THREE.SphereGeometry(radius, 24, 24);
     const targetMat = new THREE.MeshStandardMaterial({
-      color: 0x00e0d0,
-      emissive: 0x00e0d0,
+      color: 0xff3d00,
+      emissive: 0xff3d00,
       emissiveIntensity: 0.6,
       roughness: 0.25,
       metalness: 0.6,
@@ -833,7 +1184,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Outer ring (billboard) - improved
     const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
+      color: 0xff3d00,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -844,7 +1195,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Secondary inner ring for depth
     const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
     const innerRingMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
+      color: 0xff3d00,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -903,7 +1254,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const particleCount = 12;
     const particleGeo = new THREE.SphereGeometry(0.04, 6, 6);
     const particleMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
+      color: 0xff3d00,
       transparent: true,
       opacity: 1,
     });
@@ -1188,23 +1539,19 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
             t.mesh.material.color.setHex(0xffffff);
             t.core.material.opacity = 1;
           } else if (t.hitAnim > 0.5) {
-            // Transition back to teal
+            // Transition back to target color
             const transition = (0.8 - t.hitAnim) / 0.3;
             t.mesh.scale.setScalar(1.4 - transition * 0.3);
             t.mesh.material.emissiveIntensity = 3 - transition * 2;
             const colorLerp = transition;
-            t.mesh.material.color.setRGB(
-              0 + colorLerp * 0,
-              0.88 * (1 - colorLerp) + colorLerp * 0.88,
-              0.82 * (1 - colorLerp) + colorLerp * 0.82
-            );
+            t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(0xff3d00), colorLerp);
           } else {
             // Shrink and fade
             const shrink = t.hitAnim / 0.5;
             t.mesh.scale.setScalar(shrink * 1.1);
             t.mesh.material.opacity = shrink * 0.6;
             t.mesh.material.emissiveIntensity = shrink;
-            t.mesh.material.color.setHex(0x00e0d0);
+            t.mesh.material.color.setHex(0xff3d00);
           }
           t.core.material.opacity = t.hitAnim * 0.5;
           t.ring.material.opacity = t.hitAnim * 0.5;
