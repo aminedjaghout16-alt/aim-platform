@@ -74,6 +74,15 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._onPointerLockChange = this._handlePointerLockChange.bind(this);
     this._onResize = this._handleResize.bind(this);
     this._onContextMenu = (ev) => ev.preventDefault();
+
+    // Weapon system
+    this._weaponGroup = null;     // Root group attached to camera
+    this._muzzleFlash = null;     // Muzzle flash mesh
+    this._muzzleFlashLife = 0;    // Remaining flash lifetime
+    this._recoilOffset = 0;       // Current recoil displacement (0..1)
+    this._recoilRotOffset = 0;    // Current recoil rotation
+    this._weaponRestPos = new THREE.Vector3(0.28, -0.22, -0.45);
+    this._weaponRestRot = new THREE.Euler(-0.05, -0.08, 0.02);
   }
 
   /* ---------- Lifecycle ---------- */
@@ -84,6 +93,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._initialized = true;
     this._initScene();
     this._buildArena();
+    this._buildWeapon();
     this._bindEvents();
     this._clock = new THREE.Clock();
     this._clock.start();
@@ -164,6 +174,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._scene = null;
     this._camera = null;
     this._renderer3d = null;
+    this._weaponGroup = null;
+    this._muzzleFlash = null;
+    this._muzzleFlash2 = null;
     this._initialized = false;
   }
 
@@ -483,6 +496,234 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.015;
       arena.add(ring);
+    }
+  }
+
+  /* ---------- Weapon Model ---------- */
+
+  _buildWeapon() {
+    const group = new THREE.Group();
+
+    // Materials (shared for performance)
+    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.35, metalness: 0.85 });
+    const medMetal = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.4, metalness: 0.7 });
+    const lightMetal = new THREE.MeshStandardMaterial({ color: 0x3a3a42, roughness: 0.3, metalness: 0.9 });
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x111114, roughness: 0.8, metalness: 0.1 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xc8956c, roughness: 0.7, metalness: 0.05 });
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x1c1f28, roughness: 0.75, metalness: 0.1 });
+    const accentMat = new THREE.MeshStandardMaterial({ color: 0x00e0d0, roughness: 0.3, metalness: 0.6, emissive: 0x00e0d0, emissiveIntensity: 0.15 });
+
+    // --- Receiver / body ---
+    const bodyGeo = new THREE.BoxGeometry(0.045, 0.06, 0.22);
+    const body = new THREE.Mesh(bodyGeo, medMetal);
+    body.position.set(0, 0, -0.04);
+    group.add(body);
+
+    // --- Slide (top) ---
+    const slideGeo = new THREE.BoxGeometry(0.04, 0.025, 0.24);
+    const slide = new THREE.Mesh(slideGeo, darkMetal);
+    slide.position.set(0, 0.042, -0.04);
+    group.add(slide);
+
+    // --- Barrel ---
+    const barrelGeo = new THREE.CylinderGeometry(0.008, 0.009, 0.14, 8);
+    const barrel = new THREE.Mesh(barrelGeo, lightMetal);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.025, -0.24);
+    group.add(barrel);
+
+    // Barrel shroud
+    const shroudGeo = new THREE.BoxGeometry(0.035, 0.035, 0.1);
+    const shroud = new THREE.Mesh(shroudGeo, darkMetal);
+    shroud.position.set(0, 0.025, -0.2);
+    group.add(shroud);
+
+    // --- Grip ---
+    const gripGeo = new THREE.BoxGeometry(0.038, 0.09, 0.045);
+    const grip = new THREE.Mesh(gripGeo, gripMat);
+    grip.position.set(0, -0.065, 0.04);
+    grip.rotation.x = 0.2; // slight angle
+    group.add(grip);
+
+    // --- Magazine ---
+    const magGeo = new THREE.BoxGeometry(0.03, 0.055, 0.035);
+    const mag = new THREE.Mesh(magGeo, darkMetal);
+    mag.position.set(0, -0.06, 0.01);
+    group.add(mag);
+
+    // --- Trigger guard ---
+    const guardGeo = new THREE.TorusGeometry(0.018, 0.003, 6, 12, Math.PI);
+    const guard = new THREE.Mesh(guardGeo, medMetal);
+    guard.position.set(0, -0.035, -0.01);
+    guard.rotation.y = Math.PI / 2;
+    group.add(guard);
+
+    // --- Accent line on slide (teal, matches arena theme) ---
+    const accentGeo = new THREE.BoxGeometry(0.042, 0.003, 0.06);
+    const accent = new THREE.Mesh(accentGeo, accentMat);
+    accent.position.set(0, 0.055, -0.08);
+    group.add(accent);
+
+    // --- Front sight ---
+    const fSightGeo = new THREE.BoxGeometry(0.005, 0.012, 0.005);
+    const fSight = new THREE.Mesh(fSightGeo, darkMetal);
+    fSight.position.set(0, 0.062, -0.15);
+    group.add(fSight);
+
+    // --- Rear sight ---
+    const rSightGeo = new THREE.BoxGeometry(0.025, 0.01, 0.008);
+    const rSight = new THREE.Mesh(rSightGeo, darkMetal);
+    rSight.position.set(0, 0.06, 0.05);
+    group.add(rSight);
+
+    // --- Hand (holding grip) ---
+    // Palm
+    const palmGeo = new THREE.BoxGeometry(0.055, 0.04, 0.07);
+    const palm = new THREE.Mesh(palmGeo, skinMat);
+    palm.position.set(0, -0.065, 0.04);
+    palm.rotation.x = 0.2;
+    group.add(palm);
+
+    // Fingers wrapping around grip
+    for (let i = 0; i < 4; i++) {
+      const fingerGeo = new THREE.BoxGeometry(0.012, 0.015, 0.04);
+      const finger = new THREE.Mesh(fingerGeo, skinMat);
+      finger.position.set(-0.018 + i * 0.012, -0.09, 0.025 - i * 0.005);
+      finger.rotation.x = 0.4;
+      group.add(finger);
+    }
+
+    // Thumb
+    const thumbGeo = new THREE.BoxGeometry(0.015, 0.012, 0.045);
+    const thumb = new THREE.Mesh(thumbGeo, skinMat);
+    thumb.position.set(0.03, -0.045, 0.03);
+    thumb.rotation.z = -0.3;
+    thumb.rotation.x = 0.15;
+    group.add(thumb);
+
+    // --- Wrist / forearm ---
+    const wristGeo = new THREE.BoxGeometry(0.05, 0.035, 0.12);
+    const wrist = new THREE.Mesh(wristGeo, skinMat);
+    wrist.position.set(0, -0.07, 0.12);
+    wrist.rotation.x = 0.1;
+    group.add(wrist);
+
+    // Sleeve
+    const sleeveGeo = new THREE.BoxGeometry(0.058, 0.042, 0.1);
+    const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
+    sleeve.position.set(0, -0.072, 0.2);
+    sleeve.rotation.x = 0.08;
+    group.add(sleeve);
+
+    // --- Muzzle flash ---
+    const flashGeo = new THREE.PlaneGeometry(0.08, 0.08);
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: 0xffdd44,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.set(0, 0.025, -0.32);
+    group.add(flash);
+    this._muzzleFlash = flash;
+
+    // Secondary flash (perpendicular for volume illusion)
+    const flash2Geo = new THREE.PlaneGeometry(0.06, 0.06);
+    const flash2Mat = new THREE.MeshBasicMaterial({
+      color: 0xffaa22,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const flash2 = new THREE.Mesh(flash2Geo, flash2Mat);
+    flash2.position.set(0, 0.025, -0.32);
+    flash2.rotation.y = Math.PI / 2;
+    group.add(flash2);
+    this._muzzleFlash2 = flash2;
+
+    // Position the weapon group relative to camera
+    group.position.copy(this._weaponRestPos);
+    group.rotation.copy(this._weaponRestRot);
+
+    // Disable raycasting on all weapon meshes so they never interfere with aiming
+    group.traverse((child) => {
+      child.raycast = function() {};
+    });
+
+    // Attach to camera
+    this._camera.add(group);
+    this._scene.add(this._camera); // Camera must be in scene for children to render
+    this._weaponGroup = group;
+  }
+
+  // Trigger the weapon fire effects
+  _fireWeapon() {
+    this._recoilOffset = 1.0;
+    this._recoilRotOffset = 1.0;
+    this._muzzleFlashLife = 1.0;
+
+    // Show muzzle flash
+    if (this._muzzleFlash) {
+      this._muzzleFlash.material.opacity = 1;
+      this._muzzleFlash.scale.setScalar(0.8 + Math.random() * 0.5);
+      this._muzzleFlash.rotation.z = Math.random() * Math.PI;
+    }
+    if (this._muzzleFlash2) {
+      this._muzzleFlash2.material.opacity = 0.7;
+      this._muzzleFlash2.scale.setScalar(0.6 + Math.random() * 0.4);
+    }
+  }
+
+  // Update weapon animations (called each frame)
+  _updateWeapon(dt) {
+    if (!this._weaponGroup) return;
+
+    // Recoil recovery (smooth lerp back to rest)
+    const recoilSpeed = 8;
+    if (this._recoilOffset > 0.001) {
+      this._recoilOffset = Math.max(0, this._recoilOffset - dt * recoilSpeed);
+    } else {
+      this._recoilOffset = 0;
+    }
+    if (this._recoilRotOffset > 0.001) {
+      this._recoilRotOffset = Math.max(0, this._recoilRotOffset - dt * recoilSpeed);
+    } else {
+      this._recoilRotOffset = 0;
+    }
+
+    // Apply recoil: push gun backward (+z) and kick up slightly (-x rotation)
+    const recoilZ = this._recoilOffset * 0.06;
+    const recoilRotX = -this._recoilRotOffset * 0.12;
+    this._weaponGroup.position.set(
+      this._weaponRestPos.x,
+      this._weaponRestPos.y - this._recoilOffset * 0.01,
+      this._weaponRestPos.z + recoilZ,
+    );
+    this._weaponGroup.rotation.set(
+      this._weaponRestRot.x + recoilRotX,
+      this._weaponRestRot.y,
+      this._weaponRestRot.z,
+    );
+
+    // Muzzle flash decay
+    if (this._muzzleFlashLife > 0) {
+      this._muzzleFlashLife = Math.max(0, this._muzzleFlashLife - dt * 18);
+      if (this._muzzleFlash) {
+        this._muzzleFlash.material.opacity = this._muzzleFlashLife;
+        this._muzzleFlash.scale.setScalar(0.5 + this._muzzleFlashLife * 0.6);
+      }
+      if (this._muzzleFlash2) {
+        this._muzzleFlash2.material.opacity = this._muzzleFlashLife * 0.6;
+      }
+      if (this._muzzleFlashLife <= 0) {
+        if (this._muzzleFlash) this._muzzleFlash.material.opacity = 0;
+        if (this._muzzleFlash2) this._muzzleFlash2.material.opacity = 0;
+      }
     }
   }
 
@@ -832,6 +1073,10 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
     if (!this.running) return;
 
+    // Fire weapon visual/audio effects
+    this._fireWeapon();
+    VantageEngine.Audio.playShoot();
+
     // Raycast from center of screen (crosshair). Refresh the camera matrix first so a click
     // that lands right after a mouse move uses the current aim, not last frame's.
     this._camera.updateMatrixWorld();
@@ -953,6 +1198,11 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   // Idle loop: renders the arena during countdown and pause (no target logic)
   _idleRenderLoop() {
     if (this.running) return; // gameplay loop took over
+    // Keep weapon animations smooth even while idle (e.g. recoil recovery after last shot)
+    if (this._clock) {
+      const dt = Math.min(this._clock.getDelta(), 0.1);
+      this._updateWeapon(dt);
+    }
     this._render();
     this._animFrame = requestAnimationFrame(() => this._idleRenderLoop());
   }
@@ -979,6 +1229,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
     // Update particles
     this._updateParticles(dt);
+
+    // Update weapon animations
+    this._updateWeapon(dt);
 
     // Safety net: ensure there's always an alive target during gameplay
     // If no alive target and no spawn pending, spawn one immediately

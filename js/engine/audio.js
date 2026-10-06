@@ -110,6 +110,70 @@ VantageEngine.Audio = (function () {
     [660, 880, 1100].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.35, gain: 0.2, start: i * 0.11 }));
   }
 
+  function playShoot() {
+    if (!ready()) return;
+    const t0 = ctx.currentTime;
+
+    // Layer 1: Low-end thump (body of the shot)
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(150, t0);
+    thump.frequency.exponentialRampToValueAtTime(40, t0 + 0.12);
+    thumpGain.gain.setValueAtTime(0.5, t0);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    thump.connect(thumpGain);
+    thumpGain.connect(sfxBus);
+    thump.start(t0);
+    thump.stop(t0 + 0.17);
+
+    // Layer 2: Mid crack (snap)
+    const crack = ctx.createOscillator();
+    const crackGain = ctx.createGain();
+    crack.type = 'sawtooth';
+    crack.frequency.setValueAtTime(800, t0);
+    crack.frequency.exponentialRampToValueAtTime(200, t0 + 0.06);
+    crackGain.gain.setValueAtTime(0.25, t0);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08);
+    crack.connect(crackGain);
+    crackGain.connect(sfxBus);
+    crack.start(t0);
+    crack.stop(t0 + 0.1);
+
+    // Layer 3: Noise burst (the "bang" texture)
+    const bufferSize = ctx.sampleRate * 0.08;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.35, t0);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 1800;
+    noiseFilter.Q.value = 0.8;
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(sfxBus);
+    noise.start(t0);
+    noise.stop(t0 + 0.09);
+
+    // Layer 4: High-frequency ping (metallic ring)
+    const ping = ctx.createOscillator();
+    const pingGain = ctx.createGain();
+    ping.type = 'square';
+    ping.frequency.setValueAtTime(2400, t0);
+    ping.frequency.exponentialRampToValueAtTime(1200, t0 + 0.04);
+    pingGain.gain.setValueAtTime(0.06, t0);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+    ping.connect(pingGain);
+    pingGain.connect(sfxBus);
+    ping.start(t0);
+    ping.stop(t0 + 0.06);
+  }
+
   /* ---------- Music: soft procedural ambient bed ---------- */
 
   const CHORDS = [
@@ -231,7 +295,7 @@ VantageEngine.Audio = (function () {
       applyVolumes(false);
     },
     getVolumes() { return { ...vols }; },
-    playHit, playMiss, playTick, playGo, playFinish,
+    playHit, playMiss, playTick, playGo, playFinish, playShoot,
     startMusic, stopMusic,
     isMusicPlaying() { return !!musicSession; },
   };
