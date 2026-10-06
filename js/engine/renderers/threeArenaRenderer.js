@@ -282,26 +282,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     floor.rotation.x = -Math.PI / 2;
     arena.add(floor);
 
-    // Floor grid with better visibility
-    const gridHelper = new THREE.GridHelper(40, 40, 0x4a5a80, 0x2e3850);
-    gridHelper.position.y = 0.01;
-    gridHelper.material.opacity = 0.8;
-    gridHelper.material.transparent = true;
-    arena.add(gridHelper);
-
-    // Inner arena zone marker (subtle)
-    const innerZoneGeo = new THREE.RingGeometry(8, 8.1, 64);
-    const innerZoneMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
-      transparent: true,
-      opacity: 0.4,
-      side: THREE.DoubleSide,
-    });
-    const innerZone = new THREE.Mesh(innerZoneGeo, innerZoneMat);
-    innerZone.rotation.x = -Math.PI / 2;
-    innerZone.position.y = 0.02;
-    arena.add(innerZone);
-
     // --- Walls ---
     const wallMat = new THREE.MeshStandardMaterial({
       color: 0x3a4660,
@@ -331,13 +311,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = wallH;
     arena.add(ceiling);
-
-    // Ceiling grid so the top of the room has visible structure
-    const ceilGrid = new THREE.GridHelper(40, 10, 0x5a6c96, 0x3e4b6c);
-    ceilGrid.position.y = wallH - 0.02;
-    ceilGrid.material.transparent = true;
-    ceilGrid.material.opacity = 0.7;
-    arena.add(ceilGrid);
 
     // --- Crisp edge outlines: floor/ceiling seams + vertical corners ---
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x9fe8ff });
@@ -414,35 +387,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       const pillar = new THREE.Mesh(pillarGeo, pillarMat);
       pillar.position.set(...pp);
       arena.add(pillar);
-      const pillarEdges = new THREE.LineSegments(new THREE.EdgesGeometry(pillarGeo), edgeMat);
-      pillarEdges.position.set(...pp);
-      arena.add(pillarEdges);
-
-      // Pillar accent strip
-      const stripGeo = new THREE.BoxGeometry(0.05, wallH, 0.62);
-      const stripMat = new THREE.MeshBasicMaterial({
-        color: 0x00e0d0,
-        transparent: true,
-        opacity: 0.6,
-      });
-      const strip = new THREE.Mesh(stripGeo, stripMat);
-      strip.position.set(pp[0], pp[1], pp[2]);
-      arena.add(strip);
-    }
-
-    // --- Distance markers on floor ---
-    const distMarkerMat = new THREE.MeshBasicMaterial({
-      color: 0x00e0d0,
-      transparent: true,
-      opacity: 0.25,
-    });
-    const distances = [5, 10, 15];
-    for (const dist of distances) {
-      const ringGeo = new THREE.RingGeometry(dist - 0.05, dist + 0.05, 64);
-      const ring = new THREE.Mesh(ringGeo, distMarkerMat);
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.015;
-      arena.add(ring);
     }
   }
 
