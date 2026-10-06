@@ -375,12 +375,16 @@
   justify-content: center;
   z-index: var(--z-modal-backdrop);
   animation: fadeIn 0.15s ease;
+  overflow-y: auto;
+  padding: 32px 0;
 }
 .vmodal {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   width: 90%;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
   animation: fadeInUp 0.2s ease;
 }
 .vmodal-header {
@@ -898,6 +902,7 @@
 .vpage-results-overlay {
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
 }
 .vresults-screen {
   display: flex;
@@ -961,6 +966,7 @@
 
 /* --- Results Table --- */
 .vresults-table-card { overflow: hidden; }
+.vresults-table { overflow-x: auto; }
 .vresults-table-header {
   display: grid;
   grid-template-columns: 2fr 1fr 0.7fr 1fr 1fr 1fr 1.2fr;
@@ -1097,8 +1103,8 @@
 .vpage-auth {
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
   background: var(--bg-void);
   background-image:
     radial-gradient(ellipse at 50% 0%, rgba(0, 224, 208, 0.06) 0%, transparent 60%),
@@ -1107,7 +1113,9 @@
   background-size: 100% 100%, 40px 40px, 40px 40px;
 }
 .vauth-card {
+  margin: auto;
   width: 400px;
+  max-width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
@@ -2051,4 +2059,142 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .vtm-overlay, .vtm-card { animation: none; }
+}
+
+/* ============================================
+   Responsive — Mobile & Small Screens
+   ============================================ */
+
+/* Tablets and below */
+@media (max-width: 900px) {
+  .vdashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .vprofile-grid {
+    grid-template-columns: 1fr;
+  }
+  .vdetails-grid {
+    grid-template-columns: 1fr;
+  }
+  .vresults-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  /* Layout: sidebar hidden, content fills width */
+  .vsidebar {
+    display: none;
+  }
+  .vcontent {
+    padding: var(--space-md);
+  }
+  .vtopbar {
+    padding: 0 var(--space-md);
+  }
+
+  /* Auth pages: tighter padding */
+  .vpage-auth {
+    padding: 24px 12px;
+  }
+  .vauth-card {
+    padding: var(--space-lg);
+  }
+
+  /* Stats grid: single column on very small screens */
+  .vstats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Results screen in gameplay */
+  .vresults-screen {
+    padding: var(--space-xl) var(--space-md);
+  }
+  .vresults-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: var(--space-md);
+  }
+  .vresults-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .vresults-actions .vbtn {
+    width: 100%;
+  }
+
+  /* Profile */
+  .vprofile-stats {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  /* Landing */
+  .vlanding-title {
+    font-size: 2.2rem;
+  }
+  .vlanding-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  .vlanding-stats {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+  .vlanding-stat-divider {
+    width: 32px;
+    height: 1px;
+  }
+
+  /* Scenario grid */
+  .vscenario-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Setup grid */
+  .vsetup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Settings grid */
+  .vsettings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Results table: smaller font */
+  .vresults-table-header,
+  .vresults-table-row {
+    grid-template-columns: 2fr 1fr 0.7fr 1fr 1fr;
+    font-size: 0.78rem;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  /* Hide less important columns on mobile */
+  .vresults-table-header > :nth-child(6),
+  .vresults-table-header > :nth-child(7),
+  .vresults-table-row > :nth-child(6),
+  .vresults-table-row > :nth-child(7) {
+    display: none;
+  }
+
+  /* Dashboard cards */
+  .vdashboard-card {
+    min-height: auto;
+  }
+
+  /* Page header */
+  .vpage-header-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 380px) {
+  .vstats-grid {
+    grid-template-columns: 1fr;
+  }
+  .vauth-card {
+    padding: var(--space-md);
+  }
 }
