@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'gameplay', 'results', 'stats', 'profile', 'settings'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -22,6 +22,7 @@
     const [selectedScenario, setSelectedScenario] = useState(null);
     const [trainingConfig, setTrainingConfig] = useState(null);
     const [latestResultId, setLatestResultId] = useState(null);
+    const [pendingWeaponSelect, setPendingWeaponSelect] = useState(null); // { scenarioId, config }
 
     // Auth listener — persistent sessions via Firebase
     useEffect(() => {
@@ -91,8 +92,20 @@
       } catch (err) { /* storage unavailable */ }
       setSelectedScenario(scenarioId);
       setTrainingConfig(config);
-      navigate('gameplay', scenarioId);
+      // Navigate to weapon selection before gameplay
+      setPendingWeaponSelect({ scenarioId: scenarioId, config: config });
+      navigate('weaponselect', scenarioId);
     }, [navigate]);
+
+    const handleWeaponSelected = useCallback(function (weaponId) {
+      // Weapon is saved to prefs by the WeaponSelect page itself
+    }, []);
+
+    const handleWeaponConfirmed = useCallback(function () {
+      var p = pendingWeaponSelect;
+      if (!p) return;
+      navigate('gameplay', p.scenarioId);
+    }, [navigate, pendingWeaponSelect]);
 
     const handleQuickStart = useCallback((scenarioId) => {
       handleStartTraining(scenarioId, VantagePages.getSavedConfig(scenarioId));
@@ -133,7 +146,7 @@
     }
 
     // Full-screen pages (no sidebar/topbar)
-    const fullScreenPages = ['landing', 'login', 'register', 'gameplay'];
+    const fullScreenPages = ['landing', 'login', 'register', 'gameplay', 'weaponselect'];
 
     const renderPage = () => {
       switch (page) {
@@ -163,6 +176,13 @@
             scenarioId: pageParam || selectedScenario,
             onNavigate: navigate,
             onStartTraining: handleStartTraining,
+          });
+        case 'weaponselect':
+          return e(VantagePages.WeaponSelect, {
+            onNavigate: navigate,
+            onSelect: handleWeaponSelected,
+            scenarioId: pageParam || selectedScenario,
+            config: trainingConfig || {},
           });
         case 'gameplay':
           return e(VantagePages.TrainingGameplay, {

@@ -14,7 +14,7 @@ VantageEngine.PlayerPrefs = (function () {
     masterVolume: 80,
     musicVolume: 30,
     sfxVolume: 70,
-    targetColor: '#ff2d95',
+    selectedWeapon: 'classic',
     crosshair: {
       color: '#00e0d0',
       length: 7,
@@ -46,12 +46,15 @@ VantageEngine.PlayerPrefs = (function () {
     const src = raw && typeof raw === 'object' ? raw : {};
     const ch = src.crosshair && typeof src.crosshair === 'object' ? src.crosshair : {};
     const d = DEFAULTS, dc = DEFAULTS.crosshair;
+    // Validate weapon ID against the Weapons registry if available
+    var validWeapons = ['classic', 'vandal', 'phantom', 'sheriff', 'ghost', 'operator'];
+    var weaponId = validWeapons.indexOf(src.selectedWeapon) >= 0 ? src.selectedWeapon : d.selectedWeapon;
     return {
       fov: clamp(src.fov, RANGES.fov, d.fov),
       masterVolume: clamp(src.masterVolume, RANGES.masterVolume, d.masterVolume),
       musicVolume: clamp(src.musicVolume, RANGES.musicVolume, d.musicVolume),
       sfxVolume: clamp(src.sfxVolume, RANGES.sfxVolume, d.sfxVolume),
-      targetColor: /^#[0-9a-f]{6}$/i.test(src.targetColor) ? src.targetColor : d.targetColor,
+      selectedWeapon: weaponId,
       crosshair: {
         color: /^#[0-9a-f]{6}$/i.test(ch.color) ? ch.color : dc.color,
         length: clamp(ch.length, RANGES.length, dc.length),

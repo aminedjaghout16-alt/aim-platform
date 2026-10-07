@@ -71,20 +71,28 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Bound handlers
     this._onMouseMove = this._handleMouseMove.bind(this);
     this._onClick = this._handleClick.bind(this);
+    this._onMouseDown = this._handleMouseDown.bind(this);
+    this._onMouseUp = this._handleMouseUp.bind(this);
     this._onPointerLockChange = this._handlePointerLockChange.bind(this);
     this._onResize = this._handleResize.bind(this);
     this._onContextMenu = (ev) => ev.preventDefault();
 
-    this._targetColor = '#ff2d95';  // target color (changeable via setTargetColor)
-
     // Weapon system
     this._weaponGroup = null;     // Root group attached to camera
     this._muzzleFlash = null;     // Muzzle flash mesh
+    this._muzzleFlash2 = null;    // Secondary muzzle flash mesh
     this._muzzleFlashLife = 0;    // Remaining flash lifetime
     this._recoilOffset = 0;       // Current recoil displacement (0..1)
     this._recoilRotOffset = 0;    // Current recoil rotation
     this._weaponRestPos = new THREE.Vector3(0.28, -0.22, -0.45);
     this._weaponRestRot = new THREE.Euler(-0.05, -0.08, 0.02);
+
+    // Weapon config (resolved from VantageEngine.Weapons)
+    this._weapon = null;
+    this._weaponModelParts = null;  // { group, muzzleFlash, muzzleFlash2 }
+    this._lastFireTime = 0;        // Timestamp of last shot (for fire rate limiting)
+    this._mouseDown = false;        // Whether mouse button is held (for auto fire)
+    this._autoFireTimer = null;     // Interval for auto-fire
   }
 
   /* ---------- Lifecycle ---------- */
@@ -152,6 +160,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     if (this._stopped) return;
     this._stopped = true;
     this.running = false;
+    this._mouseDown = false;
+    this._stopAutoFire();
     this._spawnPending = false;
     clearTimeout(this._spawnTimer);
     cancelAnimationFrame(this._animFrame);
@@ -221,19 +231,6 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     if (this._camera) {
       this._camera.fov = n;
       this._camera.updateProjectionMatrix();
-    }
-  }
-
-  // Target color as a '#rrggbb' string; recolors targets already on screen
-  setTargetColor(hex) {
-    if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return;
-    this._targetColor = hex;
-    for (const t of this._targets || []) {
-      if (!t || !t.mesh) continue;
-      t.mesh.material.color.set(hex);
-      t.mesh.material.emissive.set(hex);
-      if (t.ring) t.ring.material.color.set(hex);
-      if (t.innerRing) t.innerRing.material.color.set(hex);
     }
   }
 
@@ -759,172 +756,39 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   /* ---------- Weapon Model ---------- */
 
   _buildWeapon() {
-    const group = new THREE.Group();
+    // Resolve weapon from the weapon system
+    var Weapons = VantageEngine.Weapons;
+    var weaponId = 'classic';
+    if (VantageEngine.PlayerPrefs && VantageEngine.PlayerPrefs.get) {
+      var prefs = VantageEngine.PlayerPrefs.get();
+      weaponId = prefs.selectedWeapon || 'classic';
+    }
+    this._weapon = Weapons ? Weapons.getById(weaponId) : null;
+    if (!this._weapon && Weapons) this._weapon = Weapons.getById('classic');
 
-    // Materials (shared for performance)
-    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2c2f35, roughness: 0.5, metalness: 0.25 });
-    const medMetal = new THREE.MeshStandardMaterial({ color: 0x3d4048, roughness: 0.5, metalness: 0.25 });
-    const lightMetal = new THREE.MeshStandardMaterial({ color: 0x5a5f69, roughness: 0.4, metalness: 0.3 });
-    const gripMat = new THREE.MeshStandardMaterial({ color: 0x1f2024, roughness: 0.8, metalness: 0.1 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xc8956c, roughness: 0.7, metalness: 0.05 });
-    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: 0.75, metalness: 0.1 });
-    const accentMat = new THREE.MeshStandardMaterial({ color: 0x00e0d0, roughness: 0.3, metalness: 0.6, emissive: 0x00e0d0, emissiveIntensity: 0.15 });
-
-    // --- Receiver / body ---
-    const bodyGeo = new THREE.BoxGeometry(0.045, 0.06, 0.22);
-    const body = new THREE.Mesh(bodyGeo, medMetal);
-    body.position.set(0, 0, -0.04);
-    group.add(body);
-
-    // --- Slide (top) ---
-    const slideGeo = new THREE.BoxGeometry(0.04, 0.025, 0.24);
-    const slide = new THREE.Mesh(slideGeo, darkMetal);
-    slide.position.set(0, 0.042, -0.04);
-    group.add(slide);
-
-    // --- Barrel ---
-    const barrelGeo = new THREE.CylinderGeometry(0.008, 0.009, 0.14, 8);
-    const barrel = new THREE.Mesh(barrelGeo, lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.025, -0.24);
-    group.add(barrel);
-
-    // Barrel shroud
-    const shroudGeo = new THREE.BoxGeometry(0.035, 0.035, 0.1);
-    const shroud = new THREE.Mesh(shroudGeo, darkMetal);
-    shroud.position.set(0, 0.025, -0.2);
-    group.add(shroud);
-
-    // --- Grip ---
-    const gripGeo = new THREE.BoxGeometry(0.038, 0.09, 0.045);
-    const grip = new THREE.Mesh(gripGeo, gripMat);
-    grip.position.set(0, -0.065, 0.04);
-    grip.rotation.x = 0.2; // slight angle
-    group.add(grip);
-
-    // --- Magazine ---
-    const magGeo = new THREE.BoxGeometry(0.03, 0.055, 0.035);
-    const mag = new THREE.Mesh(magGeo, darkMetal);
-    mag.position.set(0, -0.06, 0.01);
-    group.add(mag);
-
-    // --- Trigger guard ---
-    const guardGeo = new THREE.TorusGeometry(0.018, 0.003, 6, 12, Math.PI);
-    const guard = new THREE.Mesh(guardGeo, medMetal);
-    guard.position.set(0, -0.035, -0.01);
-    guard.rotation.y = Math.PI / 2;
-    group.add(guard);
-
-    // --- Accent line on slide (teal, matches arena theme) ---
-    const accentGeo = new THREE.BoxGeometry(0.042, 0.003, 0.06);
-    const accent = new THREE.Mesh(accentGeo, accentMat);
-    accent.position.set(0, 0.055, -0.08);
-    group.add(accent);
-
-    // --- Front sight ---
-    const fSightGeo = new THREE.BoxGeometry(0.005, 0.012, 0.005);
-    const fSight = new THREE.Mesh(fSightGeo, darkMetal);
-    fSight.position.set(0, 0.062, -0.15);
-    group.add(fSight);
-
-    // --- Rear sight ---
-    const rSightGeo = new THREE.BoxGeometry(0.025, 0.01, 0.008);
-    const rSight = new THREE.Mesh(rSightGeo, darkMetal);
-    rSight.position.set(0, 0.06, 0.05);
-    group.add(rSight);
-
-    // --- Hand (holding grip) ---
-    // Palm
-    const palmGeo = new THREE.BoxGeometry(0.055, 0.04, 0.07);
-    const palm = new THREE.Mesh(palmGeo, skinMat);
-    palm.position.set(0, -0.065, 0.04);
-    palm.rotation.x = 0.2;
-    group.add(palm);
-
-    // Fingers wrapping around grip
-    for (let i = 0; i < 4; i++) {
-      const fingerGeo = new THREE.BoxGeometry(0.012, 0.015, 0.04);
-      const finger = new THREE.Mesh(fingerGeo, skinMat);
-      finger.position.set(-0.018 + i * 0.012, -0.09, 0.025 - i * 0.005);
-      finger.rotation.x = 0.4;
-      group.add(finger);
+    var modelResult;
+    if (this._weapon && Weapons) {
+      modelResult = Weapons.buildModel(this._weapon);
+    } else {
+      // Fallback: build classic manually if weapon system not available
+      modelResult = { group: new THREE.Group(), muzzleFlash: null, muzzleFlash2: null };
     }
 
-    // Thumb
-    const thumbGeo = new THREE.BoxGeometry(0.015, 0.012, 0.045);
-    const thumb = new THREE.Mesh(thumbGeo, skinMat);
-    thumb.position.set(0.03, -0.045, 0.03);
-    thumb.rotation.z = -0.3;
-    thumb.rotation.x = 0.15;
-    group.add(thumb);
+    this._weaponModelParts = modelResult;
+    var group = modelResult.group;
+    this._muzzleFlash = modelResult.muzzleFlash;
+    this._muzzleFlash2 = modelResult.muzzleFlash2;
 
-    // --- Wrist / forearm ---
-    const wristGeo = new THREE.BoxGeometry(0.05, 0.035, 0.12);
-    const wrist = new THREE.Mesh(wristGeo, skinMat);
-    wrist.position.set(0, -0.07, 0.12);
-    wrist.rotation.x = 0.1;
-    group.add(wrist);
-
-    // Sleeve
-    const sleeveGeo = new THREE.BoxGeometry(0.058, 0.042, 0.1);
-    const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
-    sleeve.position.set(0, -0.072, 0.2);
-    sleeve.rotation.x = 0.08;
-    group.add(sleeve);
-
-    // --- Muzzle flash ---
-    const flashGeo = new THREE.PlaneGeometry(0.08, 0.08);
-    const flashMat = new THREE.MeshBasicMaterial({
-      color: 0xffdd44,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const flash = new THREE.Mesh(flashGeo, flashMat);
-    flash.position.set(0, 0.025, -0.32);
-    group.add(flash);
-    this._muzzleFlash = flash;
-
-    // Secondary flash (perpendicular for volume illusion)
-    const flash2Geo = new THREE.PlaneGeometry(0.06, 0.06);
-    const flash2Mat = new THREE.MeshBasicMaterial({
-      color: 0xffaa22,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const flash2 = new THREE.Mesh(flash2Geo, flash2Mat);
-    flash2.position.set(0, 0.025, -0.32);
-    flash2.rotation.y = Math.PI / 2;
-    group.add(flash2);
-    this._muzzleFlash2 = flash2;
+    // Set rest position/rotation from weapon config
+    if (this._weapon && this._weapon.model) {
+      var mp = this._weapon.model;
+      this._weaponRestPos.set(mp.restPos[0], mp.restPos[1], mp.restPos[2]);
+      this._weaponRestRot.set(mp.restRot[0], mp.restRot[1], mp.restRot[2]);
+    }
 
     // Position the weapon group relative to camera
     group.position.copy(this._weaponRestPos);
     group.rotation.copy(this._weaponRestRot);
-
-    // Light edge outlines so the gun's shape reads clearly
-    const gunEdgeMat = new THREE.LineBasicMaterial({ color: 0x9aa0ab, transparent: true, opacity: 0.5 });
-    const boxes = [];
-    group.traverse((c) => {
-      if (c.isMesh && c.geometry && c.geometry.type === 'BoxGeometry' && c.material.isMeshStandardMaterial) boxes.push(c);
-    });
-    for (const m of boxes) {
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), gunEdgeMat);
-      edges.position.copy(m.position);
-      edges.rotation.copy(m.rotation);
-      edges.scale.copy(m.scale);
-      m.parent.add(edges);
-    }
-
-    // Disable raycasting on all weapon meshes so they never interfere with aiming
-    group.traverse((child) => {
-      child.raycast = function() {};
-    });
 
     // Attach to camera
     this._camera.add(group);
@@ -932,21 +796,26 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._weaponGroup = group;
   }
 
-  // Trigger the weapon fire effects
+  // Trigger the weapon fire effects (uses weapon-specific settings)
   _fireWeapon() {
+    var weapon = this._weapon;
+    var recoilProfile = weapon ? weapon.recoil : { vertical: 0.08, horizontal: 0.02, recovery: 6 };
+
     this._recoilOffset = 1.0;
     this._recoilRotOffset = 1.0;
     this._muzzleFlashLife = 1.0;
 
-    // Show muzzle flash
+    // Show muzzle flash with weapon-specific size/color
     if (this._muzzleFlash) {
       this._muzzleFlash.material.opacity = 1;
-      this._muzzleFlash.scale.setScalar(0.8 + Math.random() * 0.5);
+      var flashScale = weapon ? weapon.muzzleFlash.size * 8 : 0.8;
+      this._muzzleFlash.scale.setScalar(flashScale * (0.8 + Math.random() * 0.5));
       this._muzzleFlash.rotation.z = Math.random() * Math.PI;
     }
     if (this._muzzleFlash2) {
       this._muzzleFlash2.material.opacity = 0.7;
-      this._muzzleFlash2.scale.setScalar(0.6 + Math.random() * 0.4);
+      var flash2Scale = weapon ? weapon.muzzleFlash.size * 6 : 0.6;
+      this._muzzleFlash2.scale.setScalar(flash2Scale * (0.6 + Math.random() * 0.4));
     }
   }
 
@@ -954,22 +823,24 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   _updateWeapon(dt) {
     if (!this._weaponGroup) return;
 
+    var weapon = this._weapon;
+    var recovery = weapon ? weapon.recoil.recovery : 8;
+
     // Recoil recovery (smooth lerp back to rest)
-    const recoilSpeed = 8;
     if (this._recoilOffset > 0.001) {
-      this._recoilOffset = Math.max(0, this._recoilOffset - dt * recoilSpeed);
+      this._recoilOffset = Math.max(0, this._recoilOffset - dt * recovery);
     } else {
       this._recoilOffset = 0;
     }
     if (this._recoilRotOffset > 0.001) {
-      this._recoilRotOffset = Math.max(0, this._recoilRotOffset - dt * recoilSpeed);
+      this._recoilRotOffset = Math.max(0, this._recoilRotOffset - dt * recovery);
     } else {
       this._recoilRotOffset = 0;
     }
 
     // Apply recoil: push gun backward (+z) and kick up slightly (-x rotation)
-    const recoilZ = this._recoilOffset * 0.06;
-    const recoilRotX = -this._recoilRotOffset * 0.12;
+    var recoilZ = this._recoilOffset * 0.06;
+    var recoilRotX = -this._recoilRotOffset * 0.12;
     this._weaponGroup.position.set(
       this._weaponRestPos.x,
       this._weaponRestPos.y - this._recoilOffset * 0.01,
@@ -981,9 +852,10 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       this._weaponRestRot.z,
     );
 
-    // Muzzle flash decay
+    // Muzzle flash decay (weapon-specific duration)
     if (this._muzzleFlashLife > 0) {
-      this._muzzleFlashLife = Math.max(0, this._muzzleFlashLife - dt * 18);
+      var flashDur = weapon ? (1.0 / (weapon.muzzleFlash.duration || 0.06)) : 18;
+      this._muzzleFlashLife = Math.max(0, this._muzzleFlashLife - dt * flashDur);
       if (this._muzzleFlash) {
         this._muzzleFlash.material.opacity = this._muzzleFlashLife;
         this._muzzleFlash.scale.setScalar(0.5 + this._muzzleFlashLife * 0.6);
@@ -1175,8 +1047,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Target sphere with improved materials
     const targetGeo = new THREE.SphereGeometry(radius, 24, 24);
     const targetMat = new THREE.MeshStandardMaterial({
-      color: this._targetColor,
-      emissive: this._targetColor,
+      color: 0xff3d00,
+      emissive: 0xff3d00,
       emissiveIntensity: 0.6,
       roughness: 0.25,
       metalness: 0.6,
@@ -1199,7 +1071,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Outer ring (billboard) - improved
     const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: this._targetColor,
+      color: 0xff3d00,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -1210,7 +1082,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Secondary inner ring for depth
     const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
     const innerRingMat = new THREE.MeshBasicMaterial({
-      color: this._targetColor,
+      color: 0xff3d00,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -1269,7 +1141,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const particleCount = 12;
     const particleGeo = new THREE.SphereGeometry(0.04, 6, 6);
     const particleMat = new THREE.MeshBasicMaterial({
-      color: this._targetColor,
+      color: 0xff3d00,
       transparent: true,
       opacity: 1,
     });
@@ -1344,9 +1216,81 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
     if (!this.running) return;
 
+    // Track mouse state for auto-fire
+    this._mouseDown = true;
+
+    // Attempt to fire
+    this._tryFire();
+  }
+
+  _handleMouseDown(ev) {
+    if (ev.button !== undefined && ev.button !== 0) return;
+    if (this._paused || this._stopped) return;
+    // If not locked, request lock (same as original click handler)
+    if (!this._pointerLocked) {
+      this.requestLock();
+      return;
+    }
+    if (!this.running) return;
+    if (Date.now() < this._ignoreClicksUntil) return;
+    this._mouseDown = true;
+    this._tryFire();
+    // For automatic weapons, start continuous fire
+    if (this._weapon && this._weapon.fireMode === 'auto') {
+      this._startAutoFire();
+    }
+  }
+
+  _handleMouseUp(ev) {
+    if (ev.button !== undefined && ev.button !== 0) return;
+    this._mouseDown = false;
+    this._stopAutoFire();
+  }
+
+  _startAutoFire() {
+    this._stopAutoFire();
+    if (!this._weapon) return;
+    var interval = VantageEngine.Weapons.getIntervalMs(this._weapon);
+    this._autoFireTimer = setInterval(() => {
+      if (this._mouseDown && this.running && !this._paused && !this._stopped) {
+        this._tryFire();
+      } else {
+        this._stopAutoFire();
+      }
+    }, interval);
+  }
+
+  _stopAutoFire() {
+    if (this._autoFireTimer) {
+      clearInterval(this._autoFireTimer);
+      this._autoFireTimer = null;
+    }
+  }
+
+  _tryFire() {
+    if (!this.running || this._paused || this._stopped) return;
+    var now = Date.now();
+    var weapon = this._weapon;
+    var minInterval = weapon ? VantageEngine.Weapons.getIntervalMs(weapon) : 100;
+    if (now - this._lastFireTime < minInterval) return;
+    this._lastFireTime = now;
+
     // Fire weapon visual/audio effects
     this._fireWeapon();
-    VantageEngine.Audio.playShoot();
+    // Play weapon-specific sound
+    if (VantageEngine.Audio && weapon) {
+      VantageEngine.Audio.playWeaponFire(weapon);
+    } else {
+      VantageEngine.Audio.playShoot();
+    }
+
+    // Apply recoil to camera (weapon-specific)
+    if (weapon && weapon.recoil) {
+      this._pitch += weapon.recoil.vertical * (0.8 + Math.random() * 0.4);
+      this._yaw += (Math.random() - 0.5) * weapon.recoil.horizontal * 2;
+      this._camera.rotation.x = this._pitch;
+      this._camera.rotation.y = this._yaw;
+    }
 
     // Raycast from center of screen (crosshair). Refresh the camera matrix first so a click
     // that lands right after a mouse move uses the current aim, not last frame's.
@@ -1444,7 +1388,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   _bindEvents() {
     document.addEventListener('mousemove', this._onMouseMove);
-    this.canvas.addEventListener('mousedown', this._onClick);
+    this.canvas.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mouseup', this._onMouseUp);
     this.canvas.addEventListener('contextmenu', this._onContextMenu);
     document.addEventListener('pointerlockchange', this._onPointerLockChange);
     window.addEventListener('resize', this._onResize);
@@ -1453,10 +1398,12 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   _unbindEvents() {
     document.removeEventListener('mousemove', this._onMouseMove);
-    this.canvas.removeEventListener('mousedown', this._onClick);
+    this.canvas.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mouseup', this._onMouseUp);
     this.canvas.removeEventListener('contextmenu', this._onContextMenu);
     document.removeEventListener('pointerlockchange', this._onPointerLockChange);
     window.removeEventListener('resize', this._onResize);
+    this._stopAutoFire();
 
     if (document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
@@ -1559,14 +1506,14 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
             t.mesh.scale.setScalar(1.4 - transition * 0.3);
             t.mesh.material.emissiveIntensity = 3 - transition * 2;
             const colorLerp = transition;
-            t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(this._targetColor), colorLerp);
+            t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(0xff3d00), colorLerp);
           } else {
             // Shrink and fade
             const shrink = t.hitAnim / 0.5;
             t.mesh.scale.setScalar(shrink * 1.1);
             t.mesh.material.opacity = shrink * 0.6;
             t.mesh.material.emissiveIntensity = shrink;
-            t.mesh.material.color.set(this._targetColor);
+            t.mesh.material.color.setHex(0xff3d00);
           }
           t.core.material.opacity = t.hitAnim * 0.5;
           t.ring.material.opacity = t.hitAnim * 0.5;

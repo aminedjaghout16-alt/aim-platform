@@ -278,6 +278,76 @@ VantageEngine.Audio = (function () {
     }, 450);
   }
 
+  /* ---------- Weapon-specific fire sounds ---------- */
+
+  // Play a weapon-specific fire sound using the weapon system's sound profile.
+  // Falls back to the generic playShoot() if the weapon has no custom sound.
+  function playWeaponFire(weapon) {
+    if (!ready() || !weapon) { playShoot(); return; }
+    var s = weapon.sound;
+    if (!s) { playShoot(); return; }
+    var t0 = ctx.currentTime;
+
+    // Layer 1: Low-end thump
+    var thump = ctx.createOscillator();
+    var thumpGain = ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(s.thumpFreq[0], t0);
+    thump.frequency.exponentialRampToValueAtTime(s.thumpFreq[1], t0 + 0.12);
+    thumpGain.gain.setValueAtTime(s.gain, t0);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    thump.connect(thumpGain);
+    thumpGain.connect(sfxBus);
+    thump.start(t0);
+    thump.stop(t0 + 0.17);
+
+    // Layer 2: Mid crack
+    var crack = ctx.createOscillator();
+    var crackGain = ctx.createGain();
+    crack.type = 'sawtooth';
+    crack.frequency.setValueAtTime(s.crackFreq[0], t0);
+    crack.frequency.exponentialRampToValueAtTime(s.crackFreq[1], t0 + 0.06);
+    crackGain.gain.setValueAtTime(s.gain * 0.45, t0);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08);
+    crack.connect(crackGain);
+    crackGain.connect(sfxBus);
+    crack.start(t0);
+    crack.stop(t0 + 0.1);
+
+    // Layer 3: Noise burst
+    var bufferSize = Math.floor(ctx.sampleRate * (s.noiseDur + 0.02));
+    var noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = noiseBuffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+    var noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    var noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(s.gain * 0.6, t0);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t0 + s.noiseDur);
+    var noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = s.noiseFreq;
+    noiseFilter.Q.value = 0.8;
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(sfxBus);
+    noise.start(t0);
+    noise.stop(t0 + s.noiseDur + 0.02);
+
+    // Layer 4: High-frequency ping
+    var ping = ctx.createOscillator();
+    var pingGain = ctx.createGain();
+    ping.type = 'square';
+    ping.frequency.setValueAtTime(s.pingFreq[0], t0);
+    ping.frequency.exponentialRampToValueAtTime(s.pingFreq[1], t0 + 0.04);
+    pingGain.gain.setValueAtTime(s.gain * 0.12, t0);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+    ping.connect(pingGain);
+    pingGain.connect(sfxBus);
+    ping.start(t0);
+    ping.stop(t0 + 0.06);
+  }
+
   /* ---------- Public API ---------- */
 
   return {
@@ -295,7 +365,7 @@ VantageEngine.Audio = (function () {
       applyVolumes(false);
     },
     getVolumes() { return { ...vols }; },
-    playHit, playMiss, playTick, playGo, playFinish, playShoot,
+    playHit, playMiss, playTick, playGo, playFinish, playShoot, playWeaponFire,
     startMusic, stopMusic,
     isMusicPlaying() { return !!musicSession; },
   };

@@ -2199,3 +2199,327 @@
     padding: var(--space-md);
   }
 }
+
+/* ============================================
+   Armory / Weapon Selection
+   ============================================ */
+
+.vpage-armory {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.varmory-header {
+  padding: 24px 32px 0;
+  flex-shrink: 0;
+}
+
+.varmory-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.varmory-back {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.varmory-back:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(0, 224, 208, 0.06);
+}
+
+.varmory-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1;
+}
+
+.varmory-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  letter-spacing: 0.5px;
+}
+
+.varmory-content {
+  flex: 1;
+  display: flex;
+  gap: 24px;
+  padding: 24px 32px 32px;
+  min-height: 0;
+}
+
+/* Weapon grid */
+.varmory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  flex: 1;
+  align-content: start;
+}
+
+.varmory-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 18px 16px 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  overflow: hidden;
+  font-family: inherit;
+  color: inherit;
+}
+.varmory-card:hover {
+  border-color: var(--weapon-accent, var(--accent-primary));
+  background: rgba(255, 255, 255, 0.03);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.varmory-card-selected {
+  border-color: var(--weapon-accent, var(--accent-primary));
+  background: rgba(0, 224, 208, 0.04);
+  box-shadow: 0 0 0 1px var(--weapon-accent, var(--accent-primary)), 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.varmory-card-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--weapon-accent, var(--accent-primary));
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+.varmory-card-selected .varmory-card-accent,
+.varmory-card:hover .varmory-card-accent {
+  opacity: 1;
+}
+
+.varmory-card-category {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  color: var(--weapon-accent, var(--accent-primary));
+  margin-bottom: 6px;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.varmory-card-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+}
+
+.varmory-card-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.varmory-mode-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--weapon-accent, var(--accent-primary));
+  display: inline-block;
+}
+
+.varmory-card-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--weapon-accent, var(--accent-primary));
+  color: var(--bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Detail panel */
+.varmory-detail {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  align-self: start;
+  position: sticky;
+  top: 24px;
+}
+
+.varmory-preview-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #12131a;
+  border: 1px solid var(--border-subtle);
+}
+
+.varmory-preview {
+  width: 100%;
+  height: 200px;
+  position: relative;
+}
+.varmory-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.varmory-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.varmory-weapon-name {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.varmory-weapon-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.varmory-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.varmory-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.varmory-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  width: 70px;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.varmory-stat-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 70px;
+  text-align: right;
+}
+
+.varmory-stat-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.varmory-stat-bar {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.varmory-stat-bar-recoil {
+  background: #ff6644;
+}
+
+.varmory-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.varmory-actions > * {
+  flex: 1;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .varmory-content {
+    flex-direction: column;
+  }
+  .varmory-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .varmory-detail {
+    width: 100%;
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .varmory-header {
+    padding: 16px 16px 0;
+  }
+  .varmory-content {
+    padding: 16px;
+  }
+  .varmory-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .varmory-title {
+    font-size: 1.5rem;
+  }
+  .varmory-card {
+    padding: 14px 12px 10px;
+  }
+  .varmory-card-name {
+    font-size: 1rem;
+  }
+}
