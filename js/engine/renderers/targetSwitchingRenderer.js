@@ -295,7 +295,8 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
         // INSTANT replacement: remove the dead target and spawn a new one
         // We do this after a very short delay so the hit animation plays
         var self = this;
-        var destroyedPos = target.spawnPos; // Store the position to exclude
+        // Store a copy of the position to exclude (the destroyed target's position)
+        var destroyedPos = { x: target.spawnPos.x, y: target.spawnPos.y, z: target.spawnPos.z };
         setTimeout(function () {
           if (self._stopped) return;
           // Remove the dead target from the array

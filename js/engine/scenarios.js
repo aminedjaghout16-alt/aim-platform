@@ -88,7 +88,7 @@ VantageEngine.Scenarios = {
         targetSize: 'Medium works well for most players',
         duration: '60s rounds for consistency tracking',
       },
-      allowedWeapons: ['classic', 'sheriff', 'ghost'],
+      allowedWeapons: ['classic'],
       renderer: 'TargetSwitchingRenderer',
       enabled: true,
     },
