@@ -101,7 +101,7 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
   }
 
   // Pick a random predefined position that is not currently occupied
-  _generateTSPosition() {
+  _generateTSPosition(excludePosition) {
     if (!this._spawnGrid) {
       this._spawnGrid = this._buildSpawnGrid();
     }
@@ -112,6 +112,8 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
     for (var i = 0; i < this._spawnGrid.length; i++) {
       var pos = this._spawnGrid[i];
       var isOccupied = false;
+      
+      // Check if this position is occupied by an alive target
       for (var j = 0; j < occupied.length; j++) {
         var op = occupied[j];
         if (Math.abs(pos.x - op.x) < 0.5 && Math.abs(pos.y - op.y) < 0.5 && Math.abs(pos.z - op.z) < 0.5) {
@@ -119,6 +121,14 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
           break;
         }
       }
+      
+      // Check if this is the excluded position (where a target was just destroyed)
+      if (!isOccupied && excludePosition) {
+        if (Math.abs(pos.x - excludePosition.x) < 0.5 && Math.abs(pos.y - excludePosition.y) < 0.5 && Math.abs(pos.z - excludePosition.z) < 0.5) {
+          isOccupied = true;
+        }
+      }
+      
       if (!isOccupied) {
         available.push(pos);
       }
@@ -141,10 +151,10 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
     }
   }
 
-  _spawnSingleTarget(isInitial) {
+  _spawnSingleTarget(isInitial, excludePosition) {
     if (!this.running && !isInitial) return;
 
-    var pos = this._generateTSPosition();
+    var pos = this._generateTSPosition(excludePosition);
 
     // Track recent positions
     this._tsRecentPositions.push({ x: pos.x, z: pos.z });
@@ -285,6 +295,7 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
         // INSTANT replacement: remove the dead target and spawn a new one
         // We do this after a very short delay so the hit animation plays
         var self = this;
+        var destroyedPos = target.spawnPos; // Store the position to exclude
         setTimeout(function () {
           if (self._stopped) return;
           // Remove the dead target from the array
@@ -293,10 +304,10 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
             self._targets.splice(idx, 1);
             self._disposeTarget(target);
           }
-          // Spawn replacement to maintain exactly 5
+          // Spawn replacement to maintain exactly 5, excluding the destroyed position
           var aliveCount = self._targets.filter(function (t) { return t.alive; }).length;
           if (aliveCount < self._targetCount) {
-            self._spawnSingleTarget(false);
+            self._spawnSingleTarget(false, destroyedPos);
           }
         }, 100); // Short delay for hit animation visibility
       }
