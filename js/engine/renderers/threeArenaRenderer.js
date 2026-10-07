@@ -93,6 +93,18 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._lastFireTime = 0;        // Timestamp of last shot (for fire rate limiting)
     this._mouseDown = false;        // Whether mouse button is held (for auto fire)
     this._autoFireTimer = null;     // Interval for auto-fire
+
+    // View recoil (camera kick). Deliberately SEPARATE from the player's real aim (_yaw/_pitch):
+    // the camera is rendered at (aim + recoil) and recoil always decays back to exactly 0, so
+    // it can never permanently shift the aim. Angles in radians.
+    this._recoil = { pitch: 0, yaw: 0, pitchTarget: 0, yawTarget: 0, sinceShot: 999 };
+    this._viewRecoilCfg = null;      // cached tuning for the active weapon
+
+    // Bullet tracers (small pool of reusable meshes — no per-shot allocations)
+    this._tracers = [];
+    this._tracerNext = 0;
+    this._tracerEnd = null;
+    this._arenaBox = null;
   }
 
   /* ---------- Lifecycle ---------- */
@@ -104,6 +116,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._initScene();
     this._buildArena();
     this._buildWeapon();
+    this._buildTracers();
     this._bindEvents();
     this._clock = new THREE.Clock();
     this._clock.start();
@@ -114,6 +127,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   // Called when gameplay actually begins (after countdown)
   start(sessionData) {
     this._stopIdleLoop();
+    this._resetRecoil();
     this.running = true;
     this._hitCount = 0;
     this._sessionStartTime = Date.now();
@@ -189,6 +203,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._weaponGroup = null;
     this._muzzleFlash = null;
     this._muzzleFlash2 = null;
+    this._tracers = [];
     this._initialized = false;
   }
 
@@ -821,6 +836,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   // Update weapon animations (called each frame)
   _updateWeapon(dt) {
+    this._updateRecoil(dt);
+    this._updateTracers(dt);
     if (!this._weaponGroup) return;
 
     var weapon = this._weapon;
@@ -870,10 +887,166 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     }
   }
 
+  /* ---------- View Recoil ---------- */
+
+  // Active weapon's camera-recoil tuning (degrees), with defaults for anything missing.
+  _getViewRecoil() {
+    if (!this._viewRecoilCfg) {
+      const v = (this._weapon && this._weapon.recoil && this._weapon.recoil.view) || {};
+      this._viewRecoilCfg = Object.assign({}, this.constructor.RECOIL_DEFAULTS, v);
+    }
+    return this._viewRecoilCfg;
+  }
+
+  // Camera = player's real aim + temporary recoil offset. Only place the camera angles are set.
+  _applyCameraRotation() {
+    if (!this._camera) return;
+    const lim = Math.PI / 2 - 0.05;
+    this._camera.rotation.y = this._yaw + this._recoil.yaw;
+    this._camera.rotation.x = Math.max(-lim, Math.min(lim, this._pitch + this._recoil.pitch));
+  }
+
+  // Add one shot's worth of kick. Only touches the recoil offset, never _yaw/_pitch.
+  _applyRecoilKick() {
+    const r = this._getViewRecoil();
+    const rc = this._recoil;
+    const D = Math.PI / 180;
+    // Vertical: always up, with a little variation so it doesn't feel robotic
+    const up = r.pitch * (1 + (Math.random() * 2 - 1) * r.pitchVariance) * D;
+    rc.pitchTarget = Math.min(r.maxPitch * D, rc.pitchTarget + up);
+    // Horizontal (optional: yaw 0 disables it)
+    if (r.yaw > 0) {
+      const side = (Math.random() * 2 - 1) * r.yaw * D;
+      rc.yawTarget = Math.max(-r.maxYaw * D, Math.min(r.maxYaw * D, rc.yawTarget + side));
+    }
+    rc.sinceShot = 0;
+  }
+
+  // Per frame: ease the view toward the kick, then decay the kick back to zero.
+  _updateRecoil(dt) {
+    const rc = this._recoil;
+    if (rc.pitch === 0 && rc.yaw === 0 && rc.pitchTarget === 0 && rc.yawTarget === 0) return;
+    const r = this._getViewRecoil();
+
+    rc.sinceShot += dt;
+    if (rc.sinceShot > r.delay) {            // recovery only starts once firing pauses
+      const k = Math.exp(-r.recovery * dt);  // frame-rate independent decay
+      rc.pitchTarget *= k;
+      rc.yawTarget *= k;
+    }
+    const f = 1 - Math.exp(-r.snap * dt);    // view follows the kick quickly but smoothly
+    rc.pitch += (rc.pitchTarget - rc.pitch) * f;
+    rc.yaw += (rc.yawTarget - rc.yaw) * f;
+
+    // Snap to EXACTLY zero once it is invisible, so the aim returns to the precise original point
+    const EPS = 1e-4; // ~0.006 degrees
+    if (Math.abs(rc.pitchTarget) < EPS) rc.pitchTarget = 0;
+    if (Math.abs(rc.yawTarget) < EPS) rc.yawTarget = 0;
+    if (rc.pitchTarget === 0 && Math.abs(rc.pitch) < EPS) rc.pitch = 0;
+    if (rc.yawTarget === 0 && Math.abs(rc.yaw) < EPS) rc.yaw = 0;
+
+    this._applyCameraRotation();
+  }
+
+  _resetRecoil() {
+    const rc = this._recoil;
+    rc.pitch = rc.yaw = rc.pitchTarget = rc.yawTarget = 0;
+    rc.sinceShot = 999;
+    this._applyCameraRotation();
+  }
+
+  /* ---------- Bullet Tracers ---------- */
+
+  _buildTracers() {
+    const T = this.constructor.TRACER_DEFAULTS;
+    const geo = new THREE.BoxGeometry(1, 1, 1);   // shared; scaled into a thin streak
+    this._tracers = [];
+    this._tracerNext = 0;
+    for (let i = 0; i < T.poolSize; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xfff2b0, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      mesh.raycast = function () {};   // tracers never take part in hit detection
+      this._scene.add(mesh);
+      this._tracers.push({ mesh, active: false, age: 0, dist: 1, dir: new THREE.Vector3(), start: new THREE.Vector3() });
+    }
+    this._tracerEnd = new THREE.Vector3();
+    // Inside of the room: the tracer ends on the wall/floor/ceiling the crosshair points at
+    this._arenaBox = new THREE.Box3(new THREE.Vector3(-20, 0, -20), new THREE.Vector3(20, 6, 20));
+  }
+
+  // Streak from the muzzle to where the shot went (the hit point, or the surface behind it).
+  // Must be called right after the raycaster was set from the crosshair.
+  _spawnTracer(hitPoint) {
+    if (!this._tracers.length || !this._muzzleFlash) return;
+    const T = this.constructor.TRACER_DEFAULTS;
+    const ray = this._raycaster.ray;
+    const end = this._tracerEnd;
+    if (hitPoint) end.copy(hitPoint);
+    else if (!ray.intersectBox(this._arenaBox, end)) end.copy(ray.direction).multiplyScalar(40).add(ray.origin);
+
+    // Pick a free slot, otherwise recycle the oldest
+    let t = null;
+    for (let i = 0; i < this._tracers.length; i++) {
+      if (!this._tracers[i].active) { t = this._tracers[i]; break; }
+    }
+    if (!t) { t = this._tracers[this._tracerNext]; this._tracerNext = (this._tracerNext + 1) % this._tracers.length; }
+
+    this._muzzleFlash.getWorldPosition(t.start);
+    t.dir.subVectors(end, t.start);
+    t.dist = t.dir.length();
+    if (t.dist < 0.3) { t.active = false; t.mesh.visible = false; return; }
+    t.dir.divideScalar(t.dist);
+    t.age = 0;
+    t.active = true;
+
+    const mesh = t.mesh;
+    mesh.position.copy(t.start);
+    mesh.lookAt(end);                       // +Z of the mesh now points along the shot
+    mesh.scale.set(T.width, T.width, 0.001);
+    mesh.visible = true;
+    const mf = this._weapon && this._weapon.muzzleFlash;
+    mesh.material.color.setHex(mf ? mf.color : 0xfff2b0).lerp(new THREE.Color(0xffffff), 0.45);
+    mesh.material.opacity = T.opacity;
+  }
+
+  _updateTracers(dt) {
+    const T = this.constructor.TRACER_DEFAULTS;
+    for (let i = 0; i < this._tracers.length; i++) {
+      const t = this._tracers[i];
+      if (!t.active) continue;
+      t.age += dt;
+      const travelled = T.speed * t.age;
+      if (travelled - T.length >= t.dist) {   // tail reached the end: done
+        t.active = false;
+        t.mesh.visible = false;
+        continue;
+      }
+      const head = Math.min(t.dist, travelled);
+      const tail = Math.max(0, travelled - T.length);
+      t.mesh.position.copy(t.start).addScaledVector(t.dir, (head + tail) * 0.5);
+      t.mesh.scale.z = Math.max(0.001, head - tail);
+      t.mesh.material.opacity = T.opacity * (1 - tail / t.dist);
+    }
+  }
+
   /* ---------- Target Management ---------- */
 
   // Arena bounds (walls at ±20, keep targets 2 units inside)
   static ARENA_HALF = 18;
+
+  // Fallbacks used when a weapon doesn't define `recoil.view` (angles in degrees)
+  static RECOIL_DEFAULTS = {
+    pitch: 0.8, pitchVariance: 0.15, yaw: 0.2,
+    maxPitch: 5, maxYaw: 2, recovery: 9, delay: 0.05, snap: 45,
+  };
+
+  // Bullet tracer look. speed in m/s, length in metres, width in metres.
+  static TRACER_DEFAULTS = { speed: 260, length: 3.0, width: 0.014, opacity: 0.9, poolSize: 14 };
   static ARENA_MIN_Y = 0.4;
   static ARENA_MAX_Y = 4.5;
 
@@ -1272,7 +1445,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     var now = Date.now();
     var weapon = this._weapon;
     var minInterval = weapon ? VantageEngine.Weapons.getIntervalMs(weapon) : 100;
-    if (now - this._lastFireTime < minInterval) return;
+    if (now - this._lastFireTime < minInterval - 5) return; // 5ms tolerance for setInterval jitter
     this._lastFireTime = now;
 
     // Fire weapon visual/audio effects
@@ -1284,27 +1457,25 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       VantageEngine.Audio.playShoot();
     }
 
-    // Apply recoil to camera (weapon-specific)
-    if (weapon && weapon.recoil) {
-      this._pitch += weapon.recoil.vertical * (0.8 + Math.random() * 0.4);
-      this._yaw += (Math.random() - 0.5) * weapon.recoil.horizontal * 2;
-      this._camera.rotation.x = this._pitch;
-      this._camera.rotation.y = this._yaw;
-    }
-
     // Raycast from center of screen (crosshair). Refresh the camera matrix first so a click
     // that lands right after a mouse move uses the current aim, not last frame's.
     this._camera.updateMatrixWorld();
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
 
     const meshes = this._targets.filter(t => t.alive).map(t => t.mesh);
+
+    // Only the target sphere is hittable (decorative rings/core are children and must not count)
+    const intersects = meshes.length > 0 ? this._raycaster.intersectObjects(meshes, false) : [];
+
+    // The shot is resolved from the crosshair. Only NOW add the tracer and the recoil kick, so
+    // recoil can never alter the shot that caused it (it affects the following frames/shots).
+    this._spawnTracer(intersects.length > 0 ? intersects[0].point : null);
+    this._applyRecoilKick();
+
     if (meshes.length === 0) {
       // No targets alive — don't count as miss
       return;
     }
-
-    // Only the target sphere is hittable (decorative rings/core are children and must not count)
-    const intersects = this._raycaster.intersectObjects(meshes, false);
 
     let hit = false;
     if (intersects.length > 0) {
@@ -1355,8 +1526,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Clamp pitch
     this._pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this._pitch));
 
-    this._camera.rotation.y = this._yaw;
-    this._camera.rotation.x = this._pitch;
+    this._applyCameraRotation();
   }
 
   _handlePointerLockChange() {

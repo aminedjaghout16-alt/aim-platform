@@ -9,6 +9,20 @@ window.VantageEngine = window.VantageEngine || {};
 VantageEngine.Weapons = (function () {
   /* ---------- Weapon Definitions ---------- */
 
+  // RECOIL TUNING (per weapon, in each weapon's `recoil` block)
+  //   vertical / horizontal / recovery / pattern : legacy values. `vertical` also drives the
+  //       Armory stat bar and `recovery` the gun-model kick animation. Not used for the camera.
+  //   view : the CAMERA/CROSSHAIR recoil. All angles are in DEGREES.
+  //       pitch     upward kick added per shot
+  //       yaw       max random sideways kick per shot (0 = no horizontal recoil)
+  //       maxPitch  cap on the total accumulated upward recoil (spray can't climb forever)
+  //       maxYaw    cap on the total accumulated sideways recoil (+/-)
+  //       recovery  how fast the view returns to the real aim point (higher = faster)
+  //       delay     seconds after the last shot before recovery starts. Keep it a bit above the
+  //                 weapon's shot interval on automatics so holding fire keeps climbing.
+  //       snap      how fast the view follows each kick (higher = snappier)
+  //   Recoil is a temporary offset on top of the player's aim; it always returns to exactly 0.
+
   const WEAPONS = [
     {
       id: 'vandal',
@@ -22,6 +36,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.02,     // sideways drift
         recovery: 6,          // recovery speed
         pattern: 'steady',    // steady | burst | wild
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 0.55, yaw: 0.18, maxPitch: 5.0, maxYaw: 2.0,
+          recovery: 9, delay: 0.13, snap: 45,
+        },
       },
       model: {
         restPos: [0.30, -0.25, -0.50],
@@ -55,6 +73,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.015,
         recovery: 7,
         pattern: 'steady',
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 0.4, yaw: 0.14, maxPitch: 4.0, maxYaw: 1.6,
+          recovery: 10, delay: 0.12, snap: 45,
+        },
       },
       model: {
         restPos: [0.30, -0.25, -0.50],
@@ -88,6 +110,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.03,
         recovery: 4,
         pattern: 'wild',
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 1.8, yaw: 0.35, maxPitch: 6.0, maxYaw: 2.0,
+          recovery: 7, delay: 0.06, snap: 50,
+        },
       },
       model: {
         restPos: [0.28, -0.22, -0.45],
@@ -121,6 +147,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.01,
         recovery: 8,
         pattern: 'steady',
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 0.7, yaw: 0.15, maxPitch: 4.0, maxYaw: 1.5,
+          recovery: 11, delay: 0.04, snap: 50,
+        },
       },
       model: {
         restPos: [0.28, -0.22, -0.45],
@@ -154,6 +184,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.04,
         recovery: 2.5,
         pattern: 'wild',
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 3.5, yaw: 0.6, maxPitch: 8.0, maxYaw: 2.5,
+          recovery: 4.5, delay: 0.12, snap: 55,
+        },
       },
       model: {
         restPos: [0.32, -0.28, -0.55],
@@ -187,6 +221,10 @@ VantageEngine.Weapons = (function () {
         horizontal: 0.015,
         recovery: 7,
         pattern: 'steady',
+        view: {            // camera recoil, degrees (see RECOIL TUNING above)
+          pitch: 1.0, yaw: 0.2, maxPitch: 5.0, maxYaw: 1.8,
+          recovery: 9, delay: 0.05, snap: 50,
+        },
       },
       model: {
         restPos: [0.28, -0.22, -0.45],
