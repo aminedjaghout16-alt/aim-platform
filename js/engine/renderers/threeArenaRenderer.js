@@ -101,6 +101,14 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._recoil = { pitch: 0, yaw: 0, pitchTarget: 0, yawTarget: 0, sinceShot: 999 };
     this._viewRecoilCfg = null;      // cached tuning for the active weapon
 
+    // Scope (weapons with a `scope` config, e.g. the Operator). Right-click cycles the zoom levels.
+    this._scopeLevel = 0;        // 0 = unscoped, 1..n = index+1 into weapon.scope.zoomLevels
+    this._zoomCur = 1;           // current smoothed magnification (1 = none)
+    this._zoomTarget = 1;        // magnification we are easing toward
+    this._scopeBlend = 0;        // 0..1 how far scoped-in we are (drives accuracy + overlay)
+    this._scopeEl = null;        // DOM overlay (black lens frame + reticle)
+    this._onScope = null;        // callback(isScoped) so the page can hide the normal crosshair
+
     // Bullet tracers (small pool of reusable meshes — no per-shot allocations)
     this._tracers = [];
     this._tracerNext = 0;
@@ -141,6 +149,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   pause() {
     this._paused = true;
+    this._resetScope();
     this._pauseStart = Date.now();
     this.running = false;
     clearTimeout(this._spawnTimer);
@@ -245,7 +254,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     if (!(n > 0)) return;
     this._fov = n;
     if (this._camera) {
-      this._camera.fov = n;
+      // While scoped/zooming the per-frame scope update owns camera.fov
+      this._camera.fov = this._fovForZoom(this._zoomCur);
       this._camera.updateProjectionMatrix();
     }
   }
@@ -256,9 +266,94 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     return this._getDifficultyFactor();
   }
 
-  setCallbacks({ onHit, onMiss }) {
+  setCallbacks({ onHit, onMiss, onScope }) {
     this._onHit = onHit;
     this._onMiss = onMiss;
+    this._onScope = onScope || null;
+  }
+
+  /* ---------- Scope ---------- */
+
+  _hasScope() {
+    return !!(this._weapon && this._weapon.scope && this._weapon.scope.zoomLevels && this._weapon.scope.zoomLevels.length);
+  }
+
+  // Vertical FOV that gives `zoom`x magnification of the base FOV (tan-based, so it is a true zoom)
+  _fovForZoom(zoom) {
+    if (!(zoom > 1)) return this._fov;
+    const half = Math.atan(Math.tan(this._fov * Math.PI / 360) / zoom);
+    return half * 360 / Math.PI;
+  }
+
+  // Right-click: unscoped -> scope 1 -> scope 2 -> ... -> unscoped
+  _cycleScope() {
+    if (!this._hasScope()) return;
+    const levels = this._weapon.scope.zoomLevels;
+    this._setScopeLevel(this._scopeLevel >= levels.length ? 0 : this._scopeLevel + 1);
+  }
+
+  _setScopeLevel(level) {
+    if (!this._hasScope() && level !== 0) return;
+    const was = this._scopeLevel > 0;
+    this._scopeLevel = level;
+    this._zoomTarget = level > 0 ? this._weapon.scope.zoomLevels[level - 1] : 1;
+    this._ensureScopeOverlay();
+    const now = level > 0;
+    if (now !== was && this._onScope) this._onScope(now);
+  }
+
+  // Per frame: ease the zoom, drive the overlay, hide the gun while looking through the scope
+  _updateScope(dt) {
+    if (!this._camera) return;
+    if (this._zoomCur === this._zoomTarget && this._scopeLevel === 0 && this._scopeBlend === 0) return;
+    const f = 1 - Math.exp(-16 * dt);
+    this._zoomCur += (this._zoomTarget - this._zoomCur) * f;
+    if (Math.abs(this._zoomTarget - this._zoomCur) < 0.002) this._zoomCur = this._zoomTarget;
+    const first = this._hasScope() ? this._weapon.scope.zoomLevels[0] : 2;
+    this._scopeBlend = Math.max(0, Math.min(1, (this._zoomCur - 1) / (first - 1)));
+    if (this._zoomCur === 1) this._scopeBlend = 0;
+
+    const fov = this._fovForZoom(this._zoomCur);
+    if (Math.abs(this._camera.fov - fov) > 1e-4) {
+      this._camera.fov = fov;
+      this._camera.updateProjectionMatrix();
+    }
+    if (this._scopeEl) {
+      this._scopeEl.style.opacity = String(this._scopeBlend);
+      this._scopeEl.style.display = this._scopeBlend > 0.01 ? 'block' : 'none';
+    }
+    if (this._weaponGroup) this._weaponGroup.visible = this._scopeBlend < 0.5;
+  }
+
+  _ensureScopeOverlay() {
+    if (this._scopeEl || !this.canvas || !this.canvas.parentElement) return;
+    const el = document.createElement('div');
+    el.className = 'vscope-overlay';
+    el.style.display = 'none';
+    el.innerHTML = '<div class="vscope-line vscope-h"></div><div class="vscope-line vscope-v"></div><div class="vscope-dot"></div>';
+    this.canvas.parentElement.appendChild(el);
+    this._scopeEl = el;
+    // Reticle follows the player's crosshair colour so it is visible on the dark arena
+    try {
+      const ch = VantageEngine.PlayerPrefs.get().crosshair;
+      if (ch && ch.color) el.style.setProperty('--scope-color', ch.color);
+    } catch (err) { /* keep CSS default */ }
+  }
+
+  // Drop out of the scope instantly (pause, pointer unlock, stop)
+  _resetScope() {
+    const was = this._scopeLevel > 0;
+    this._scopeLevel = 0;
+    this._zoomTarget = 1;
+    this._zoomCur = 1;
+    this._scopeBlend = 0;
+    if (this._camera) {
+      this._camera.fov = this._fov;
+      this._camera.updateProjectionMatrix();
+    }
+    if (this._scopeEl) { this._scopeEl.style.opacity = '0'; this._scopeEl.style.display = 'none'; }
+    if (this._weaponGroup) this._weaponGroup.visible = true;
+    if (was && this._onScope) this._onScope(false);
   }
 
   /* ---------- Scene Initialization ---------- */
@@ -779,7 +874,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       var prefs = VantageEngine.PlayerPrefs.get();
       weaponId = prefs.selectedWeapon || 'classic';
     }
-    this._weapon = Weapons ? Weapons.getById(weaponId) : null;
+    // Respect the game mode's weapon lock (e.g. Static Flick = single-shot weapons only)
+    var scenarioId = this.scenario && this.scenario.id;
+    this._weapon = Weapons ? Weapons.resolveForScenario(weaponId, scenarioId) : null;
     if (!this._weapon && Weapons) this._weapon = Weapons.getById('classic');
 
     var modelResult;
@@ -837,6 +934,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
 
   // Update weapon animations (called each frame)
   _updateWeapon(dt) {
+    this._updateScope(dt);
     this._updateRecoil(dt);
     this._updateTracers(dt);
     if (!this._weaponGroup) return;
@@ -1411,6 +1509,13 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
   }
 
   _handleMouseDown(ev) {
+    // Right-click: scope (weapons with a scope only)
+    if (ev.button === 2) {
+      if (this._paused || this._stopped || !this._pointerLocked || !this.running) return;
+      if (Date.now() < this._ignoreClicksUntil) return;
+      this._cycleScope();
+      return;
+    }
     if (ev.button !== undefined && ev.button !== 0) return;
     if (this._paused || this._stopped) return;
     // If not locked, request lock (same as original click handler)
@@ -1475,6 +1580,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // that lands right after a mouse move uses the current aim, not last frame's.
     this._camera.updateMatrixWorld();
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
+    this._applyShotSpread();
 
     const meshes = this._targets.filter(t => t.alive).map(t => t.mesh);
 
@@ -1528,14 +1634,34 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     if (!hit && this._onMiss) this._onMiss();
   }
 
+  // Inaccuracy for weapons with `accuracy.hipSpread` (Operator): the shot goes to a random point
+  // inside a cone around the crosshair. The cone closes as the scope zooms in, so a full scope is
+  // pinpoint but unscoped / half-scoped shots miss. Weapons without the setting are unaffected.
+  _applyShotSpread() {
+    const acc = this._weapon && this._weapon.accuracy;
+    if (!acc || !(acc.hipSpread > 0)) return;
+    const spreadDeg = acc.hipSpread * (1 - this._scopeBlend);
+    if (spreadDeg <= 0.001) return;
+    const r = spreadDeg * Math.PI / 180 * Math.sqrt(Math.random()); // uniform over the disc
+    const a = Math.random() * Math.PI * 2;
+    const dir = new THREE.Vector3(0, 0, -1);
+    dir.applyEuler(new THREE.Euler(Math.sin(a) * r, Math.cos(a) * r, 0, 'YXZ'));
+    dir.applyQuaternion(this._camera.quaternion).normalize();
+    this._raycaster.ray.direction.copy(dir);
+  }
+
   /* ---------- Mouse Look ---------- */
 
   _handleMouseMove(ev) {
     if (!this._pointerLocked || this._paused || this._stopped || !this._camera) return;
     if (this._skipMoves > 0) { this._skipMoves--; return; }
 
-    this._yaw -= ev.movementX * this._radPerCount;
-    this._pitch -= ev.movementY * this._radPerCount;
+    // While zoomed, scale sensitivity by the FOV ratio so the crosshair crosses the screen at
+    // the same speed as unscoped (otherwise the scope would feel twitchy).
+    const zoomK = this._camera.fov === this._fov ? 1
+      : Math.tan(this._camera.fov * Math.PI / 360) / Math.tan(this._fov * Math.PI / 360);
+    this._yaw -= ev.movementX * this._radPerCount * zoomK;
+    this._pitch -= ev.movementY * this._radPerCount * zoomK;
 
     // Clamp pitch
     this._pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this._pitch));
@@ -1550,6 +1676,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
       this._ignoreClicksUntil = Date.now() + 250;
       this._skipMoves = 2;
     }
+    if (!this._pointerLocked && wasLocked) this._resetScope();
     // Update canvas cursor
     if (this.canvas) {
       this.canvas.style.cursor = this._pointerLocked ? 'none' : 'crosshair';
@@ -1588,6 +1715,9 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     document.removeEventListener('pointerlockchange', this._onPointerLockChange);
     window.removeEventListener('resize', this._onResize);
     this._stopAutoFire();
+    this._resetScope();
+    if (this._scopeEl && this._scopeEl.parentElement) this._scopeEl.parentElement.removeChild(this._scopeEl);
+    this._scopeEl = null;
 
     if (document.pointerLockElement === this.canvas) {
       document.exitPointerLock();

@@ -219,3 +219,27 @@ The weapon system is designed to be reusable. Future training modes can:
 - Play weapon sounds via `VantageEngine.Audio.playWeaponFire(weapon)`
 - Add new weapons by extending the WEAPONS array in weapons.js
 - Add weapon-specific training scenarios (e.g., "Sheriff Only", "Sniper Practice")
+
+---
+
+## Update: game-mode weapon lock + Operator scope
+
+### Static Flick = single-shot weapons only
+- `js/engine/scenarios.js`: the Static Flick scenario now has `allowedWeapons: ['classic', 'sheriff', 'ghost']`.
+  A scenario without this list allows every weapon, so a future game mode can simply list the
+  weapons it wants (e.g. Vandal / Phantom / Operator) and they unlock for that mode.
+- `js/engine/weapons.js`: new helpers `getAllowedIds(scenarioId)`, `isAllowed(id, scenarioId)`,
+  `resolveForScenario(id, scenarioId)`.
+- `js/pages/WeaponSelect.js` + `css/components.css`: locked weapons are greyed out with a LOCKED badge
+  and cannot be selected. A previously saved locked weapon (e.g. Vandal) falls back to Classic.
+- `threeArenaRenderer.js` `_buildWeapon()` also enforces the lock, so a stale saved pref can never
+  put a locked weapon into the game.
+
+### Operator (for the future mode that unlocks it)
+- **Scope on right-click**: unscoped -> 2.5x -> 5x -> unscoped. Zoom is eased, sensitivity scales with
+  the zoom (tan-based, so a scoped flick travels the same view distance), the gun model hides while
+  scoped, a black lens + reticle overlay is shown, and the normal crosshair is hidden. Scope drops on
+  pause, pointer-unlock and stop. Config: `scope.zoomLevels` in weapons.js.
+- **Unscoped inaccuracy**: `accuracy.hipSpread` (default 5.5 deg cone). Shots land at a random point
+  inside the cone; the cone shrinks to 0 as the scope zooms in, so only a fully scoped shot is exact.
+  The tracer follows the spread shot too. Weapons without an `accuracy` block are unaffected.

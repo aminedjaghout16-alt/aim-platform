@@ -31,6 +31,9 @@ VantageEngine.Scenarios = {
         targetSize: 'Start with Medium, decrease as you improve',
         duration: '60s rounds for consistency tracking',
       },
+      // Weapons usable in this mode. Single-shot (semi-auto) weapons only; the rest stay
+      // locked in the Armory until another game mode unlocks them. Omit this list to allow all.
+      allowedWeapons: ['classic', 'sheriff', 'ghost'],
       renderer: 'ThreeArenaRenderer',
       enabled: true,
     },

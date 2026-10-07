@@ -10,7 +10,11 @@ VantagePages.WeaponSelect = function WeaponSelect({ onNavigate, onSelect, scenar
   var Prefs = VantageEngine.PlayerPrefs;
   var allWeapons = Weapons.getAll();
   var currentPrefs = Prefs.get();
-  var savedWeaponId = currentPrefs.selectedWeapon || 'classic';
+  // Game-mode weapon lock: only these weapons can be picked for this scenario
+  var allowedIds = Weapons.getAllowedIds(scenarioId);
+  var savedWeaponId = Weapons.isAllowed(currentPrefs.selectedWeapon, scenarioId)
+    ? currentPrefs.selectedWeapon
+    : Weapons.resolveForScenario(currentPrefs.selectedWeapon, scenarioId).id;
 
   var _s = useState(savedWeaponId);
   var selectedId = _s[0];
@@ -121,6 +125,7 @@ VantagePages.WeaponSelect = function WeaponSelect({ onNavigate, onSelect, scenar
   }, [selectedId]);
 
   var handleSelect = function () {
+    if (!Weapons.isAllowed(selectedId, scenarioId)) return; // locked in this mode
     Prefs.set({ selectedWeapon: selectedId });
     if (onSelect) onSelect(selectedId);
   };
@@ -162,7 +167,9 @@ VantagePages.WeaponSelect = function WeaponSelect({ onNavigate, onSelect, scenar
         }, e('span', null, '\u2190'), ' BACK'),
         e('div', null,
           e('h1', { className: 'varmory-title' }, 'ARMORY'),
-          e('p', { className: 'varmory-subtitle' }, 'Select your weapon before training'),
+          e('p', { className: 'varmory-subtitle' }, allowedIds.length < allWeapons.length
+            ? 'Single-shot weapons only in this mode \u2014 the rest unlock in other game modes'
+            : 'Select your weapon before training'),
         ),
       ),
     ),
@@ -172,15 +179,19 @@ VantagePages.WeaponSelect = function WeaponSelect({ onNavigate, onSelect, scenar
       e('div', { className: 'varmory-grid' },
         allWeapons.map(function (weapon, idx) {
           var isSelected = selectedId === weapon.id;
+          var isLocked = allowedIds.indexOf(weapon.id) < 0;
           var accentHex = '#' + (weapon.accentColor || 0x00e0d0).toString(16).padStart(6, '0');
           return e('button', {
             key: weapon.id,
-            className: 'varmory-card' + (isSelected ? ' varmory-card-selected' : '') + ' animate-in',
+            className: 'varmory-card' + (isSelected ? ' varmory-card-selected' : '') + (isLocked ? ' varmory-card-locked' : '') + ' animate-in',
+            disabled: isLocked,
+            'aria-disabled': isLocked,
+            title: isLocked ? 'Locked \u2014 not available in this game mode' : undefined,
             style: {
               '--weapon-accent': accentHex,
               animationDelay: (idx * 0.06) + 's',
             },
-            onClick: function () { setSelectedId(weapon.id); },
+            onClick: function () { if (!isLocked) setSelectedId(weapon.id); },
           },
             e('div', { className: 'varmory-card-accent' }),
             e('div', { className: 'varmory-card-category' }, weapon.category.toUpperCase()),
@@ -189,6 +200,7 @@ VantagePages.WeaponSelect = function WeaponSelect({ onNavigate, onSelect, scenar
               e('span', { className: 'varmory-mode-dot' }),
               fireModeLabel(weapon.fireMode),
             ),
+            isLocked && e('div', { className: 'varmory-card-lock' }, '\uD83D\uDD12 LOCKED'),
             isSelected && e('div', { className: 'varmory-card-check' }, '\u2713'),
           );
         }),

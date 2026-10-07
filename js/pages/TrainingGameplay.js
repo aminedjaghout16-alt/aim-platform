@@ -19,6 +19,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const [result, setResult] = useState(null);
   const [saveInfo, setSaveInfo] = useState(null);
   const [hitMarker, setHitMarker] = useState(0);
+  const [scoped, setScoped] = useState(false); // looking through a weapon scope (hides the crosshair)
   const [countdownNum, setCountdownNum] = useState(null); // 3,2,1,0(GO) or null
   const [lockError, setLockError] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -110,6 +111,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         engine.renderer.setCallbacks({
           onHit: (rt) => { engine.registerHit(rt); setHitMarker(Date.now()); Audio.playHit(); },
           onMiss: () => { engine.registerMiss(); Audio.playMiss(); },
+          onScope: (isScoped) => setScoped(!!isScoped),
         });
       }
       engine.prepare(); // builds the arena → 'ready'
@@ -418,7 +420,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   }
 
   // ---- Active gameplay ----
-  const showCrosshair = (engineState === 'running' || engineState === 'countdown') && locked;
+  const showCrosshair = (engineState === 'running' || engineState === 'countdown') && locked && !scoped;
   const showCountdown = countdownNum !== null && (engineState === 'countdown' || engineState === 'running');
   const cm360 = Math.round(Settings.getCm360(effectiveConfig.game, effectiveConfig.sensitivity, effectiveConfig.dpi));
   const gameInfo = Settings.getGame(effectiveConfig.game);

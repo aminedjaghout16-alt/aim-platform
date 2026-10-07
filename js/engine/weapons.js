@@ -176,9 +176,15 @@ VantageEngine.Weapons = (function () {
       id: 'operator',
       name: 'Operator',
       category: 'Sniper',
-      description: 'Bolt-action sniper rifle. One-shot kill, very slow rate.',
+      description: 'Bolt-action sniper rifle. Right-click to scope (2.5x, then 5x). Unscoped shots are wildly inaccurate.',
       fireMode: 'sniper',
       fireRate: 60,
+      // Right-click cycles: scope 1 -> scope 2 -> off. Zoom is a magnification of the player's FOV.
+      scope: { zoomLevels: [2.5, 5] },
+      // Shot spread in DEGREES (random point inside a cone around the crosshair).
+      //   hipSpread: unscoped cone half-angle. It shrinks to 0 as the scope zooms in, so a
+      //   half-finished scope-in is still sloppy and only a full scope is pinpoint.
+      accuracy: { hipSpread: 5.5 },
       recoil: {
         vertical: 0.22,
         horizontal: 0.04,
@@ -255,6 +261,28 @@ VantageEngine.Weapons = (function () {
   }
 
   function getAll() { return WEAPONS.slice(); }
+
+  /* ---------- Per-game-mode availability ---------- */
+  // A scenario can list `allowedWeapons`; anything not listed is locked in that mode.
+  // A scenario without the list (or an unknown scenario) allows every weapon.
+  function getAllowedIds(scenarioId) {
+    var all = WEAPONS.map(function (w) { return w.id; });
+    var sc = VantageEngine.Scenarios && VantageEngine.Scenarios.getById
+      ? VantageEngine.Scenarios.getById(scenarioId) : null;
+    if (!sc || !Array.isArray(sc.allowedWeapons)) return all;
+    return all.filter(function (id) { return sc.allowedWeapons.indexOf(id) >= 0; });
+  }
+
+  function isAllowed(weaponId, scenarioId) {
+    return getAllowedIds(scenarioId).indexOf(weaponId) >= 0;
+  }
+
+  // Weapon to actually use: the requested one if the mode allows it, else the first allowed.
+  function resolveForScenario(weaponId, scenarioId) {
+    var allowed = getAllowedIds(scenarioId);
+    if (allowed.indexOf(weaponId) >= 0) return getById(weaponId);
+    return getById(allowed.indexOf('classic') >= 0 ? 'classic' : allowed[0]);
+  }
 
   function getIntervalMs(weapon) {
     return 60000 / (weapon.fireRate || 400);
@@ -739,6 +767,9 @@ VantageEngine.Weapons = (function () {
     WEAPONS: WEAPONS,
     getById: getById,
     getAll: getAll,
+    getAllowedIds: getAllowedIds,
+    isAllowed: isAllowed,
+    resolveForScenario: resolveForScenario,
     getIntervalMs: getIntervalMs,
     buildModel: buildModel,
     createFireSound: createFireSound,
