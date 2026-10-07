@@ -73,20 +73,17 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
 
   /* ---------- Target spawning ---------- */
 
-  // Predefined spawn positions in a fixed rectangular area in front of the player.
-  // Grid: 5 columns (x) × 3 rows (y) × 2 depths (z) = 30 positions.
-  // All positions are in front of the player (negative z), within the arena.
+  // Predefined spawn positions in a small, clean grid directly in front of the player.
+  // Grid: 4 columns × 3 rows = 12 fixed slots on a single plane.
   _buildSpawnGrid() {
-    var cols = [-8, -4, 0, 4, 8];           // horizontal spread
-    var rows = [1.2, 2.2, 3.2];             // vertical spread (low, eye, high)
-    var depths = [-7, -13];                  // near, far (in front of player)
+    var cols = [-3, -1, 1, 3];      // 4 columns, evenly spaced
+    var rows = [1.5, 2.5, 3.5];     // 3 rows (low, middle, high)
+    var z = -10;                     // fixed depth in front of player
 
     var grid = [];
-    for (var d = 0; d < depths.length; d++) {
-      for (var r = 0; r < rows.length; r++) {
-        for (var c = 0; c < cols.length; c++) {
-          grid.push({ x: cols[c], y: rows[r], z: depths[d] });
-        }
+    for (var r = 0; r < rows.length; r++) {
+      for (var c = 0; c < cols.length; c++) {
+        grid.push({ x: cols[c], y: rows[r], z: z });
       }
     }
     return grid;
@@ -127,7 +124,7 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
       }
     }
 
-    // If all positions are occupied (shouldn't happen with 30 slots and 5 targets), pick any
+    // If all positions are occupied (shouldn't happen with 12 slots and 5 targets), pick any
     if (available.length === 0) {
       available = this._spawnGrid.slice();
     }
