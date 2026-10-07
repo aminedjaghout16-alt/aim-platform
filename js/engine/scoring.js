@@ -76,6 +76,48 @@ VantageEngine.Scoring = {
     };
   },
 
+  // Calculate score for a tracking session (strafe-tracking-3d)
+  // Rewards: time on target, shot accuracy, consistency, low tracking error
+  calculateTrackingScore(trackingStats) {
+    var trackingAccuracy = trackingStats.trackingAccuracy || 0; // 0-100 %
+    var hits = trackingStats.hits || 0;
+    var misses = trackingStats.misses || 0;
+    var shotsFired = hits + misses;
+    var bestTrackingStreak = trackingStats.bestTrackingStreak || 0; // seconds
+    var avgTrackingError = trackingStats.avgTrackingError || 0; // degrees
+    var duration = trackingStats.duration || 1;
+
+    // Time-on-target score (0-400): directly from tracking accuracy %
+    var onTargetScore = (trackingAccuracy / 100) * 400;
+
+    // Shot accuracy score (0-200): hits / shots fired
+    var shotAccuracy = shotsFired > 0 ? hits / shotsFired : 0;
+    var shotScore = shotAccuracy * 200;
+
+    // Consistency score (0-200): best tracking streak relative to duration
+    // A perfect session would have a streak equal to the full duration
+    var streakFraction = duration > 0 ? Math.min(1, bestTrackingStreak / duration) : 0;
+    var consistencyScore = streakFraction * 200;
+
+    // Tracking error score (0-200): lower angular error = higher score
+    // 0° error = 200 points, 20°+ error = 0 points
+    var maxErrorDeg = 20;
+    var errorScore = Math.max(0, Math.min(200, (1 - avgTrackingError / maxErrorDeg) * 200));
+
+    // Volume factor: ensure enough shots were fired for a meaningful score
+    var expectedShots = Math.max(10, duration * 1.5);
+    var volume = Math.min(1, shotsFired / expectedShots);
+
+    var total = Math.round((onTargetScore + shotScore + consistencyScore + errorScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(trackingAccuracy),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;

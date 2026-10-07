@@ -37,6 +37,33 @@ VantageEngine.Scenarios = {
       renderer: 'ThreeArenaRenderer',
       enabled: true,
     },
+    {
+      id: 'strafe-tracking-3d',
+      name: 'Strafe Tracking — 3D',
+      shortName: 'Track',
+      category: 'tracking',
+      description: 'Track a continuously moving target and maintain aim while it changes direction.',
+      purpose: 'Develop smooth tracking accuracy by training your ability to keep the crosshair on a target that accelerates, decelerates, and reverses direction. Essential for games where enemies strafe during gunfights.',
+      difficulty: 'medium',
+      trainingType: 'tracking',
+      recommendedGame: 'valorant',
+      estimatedDuration: '60s',
+      skillsTrained: ['Tracking accuracy', 'Smooth mouse control', 'Target reading', 'Consistency'],
+      tags: ['tracking', 'strafe', 'movement', 'intermediate'],
+      defaults: {
+        targetSize: 'medium',
+        targetSpeed: 'normal',
+        duration: 'standard',
+        maxTargets: 1,
+      },
+      recommendedSettings: {
+        sensitivity: 'Use your in-game sensitivity',
+        targetSize: 'Medium works well for most players',
+        duration: '60s rounds for consistent measurement',
+      },
+      renderer: 'StrafeTrackingRenderer',
+      enabled: true,
+    },
   ],
 
   getById(id) {

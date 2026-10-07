@@ -84,6 +84,28 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     });
     engine.onFinish((res) => {
       Audio.playFinish();
+      // For tracking mode: merge renderer tracking stats and recalculate score
+      if (engine.renderer && engine.renderer.getTrackingStats) {
+        var ts = engine.renderer.getTrackingStats();
+        var shots = res.stats.hits + res.stats.misses;
+        var trackingInput = {
+          trackingAccuracy: ts.trackingAccuracy,
+          hits: res.stats.hits,
+          misses: res.stats.misses,
+          bestTrackingStreak: ts.bestTrackingStreak,
+          avgTrackingError: ts.avgTrackingError,
+          duration: res.stats.duration || 1,
+        };
+        var trackScore = VantageEngine.Scoring.calculateTrackingScore(trackingInput);
+        res.stats.trackingAccuracy = ts.trackingAccuracy;
+        res.stats.timeOnTarget = ts.timeOnTarget;
+        res.stats.avgTrackingError = ts.avgTrackingError;
+        res.stats.bestTrackingStreak = ts.bestTrackingStreak;
+        res.stats.shotsFired = shots;
+        res.score = trackScore.total;
+        res.grade = trackScore.grade.letter;
+        res.isTrackingMode = true;
+      }
       setResult(res);
       // Save the real result immediately so it is never lost
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
@@ -357,13 +379,83 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
 
   // ---- Results screen ----
   if (engineState === 'finished' && result) {
-    const grade = VantageEngine.Scoring.getGrade(result.score) || {};
-    const cfg = result.config || {};
-    const diff = Settings.getDifficulty(cfg.difficulty);
-    const size = Settings.getTargetSize(cfg.targetSize);
-    const dur = Settings.getDuration(cfg.duration);
-    const game = Settings.getGame(cfg.game);
-    const shots = result.stats.hits + result.stats.misses;
+    var grade = VantageEngine.Scoring.getGrade(result.score) || {};
+    var cfg = result.config || {};
+    var diff = Settings.getDifficulty(cfg.difficulty);
+    var size = Settings.getTargetSize(cfg.targetSize);
+    var dur = Settings.getDuration(cfg.duration);
+    var game = Settings.getGame(cfg.game);
+    var isTracking = result.isTrackingMode || (scenario && scenario.id === 'strafe-tracking-3d');
+    // Resolve weapon name
+    var weaponUsed = 'Classic';
+    try {
+      var _prefs = VantageEngine.PlayerPrefs.get();
+      var _w = VantageEngine.Weapons.getById(_prefs.selectedWeapon || 'classic');
+      if (_w) weaponUsed = _w.name;
+    } catch (err) { /* keep default */ }
+
+    if (isTracking) {
+      // Tracking-specific results screen
+      var tShots = result.stats.hits + result.stats.misses;
+      var tSummary = [
+        diff && diff.label,
+        dur && dur.label,
+        weaponUsed,
+      ].filter(Boolean).join(' · ');
+
+      var tSaveLine = 'Saving session…';
+      var tSaveClass = 'vresults-save';
+      if (saveInfo) {
+        if (saveInfo.previousBest === null) tSaveLine = 'First session saved to your history';
+        else if (saveInfo.isPersonalBest) { tSaveLine = '★ NEW PERSONAL BEST'; tSaveClass += ' vresults-save-pb'; }
+        else tSaveLine = 'Session saved · Personal best ' + saveInfo.previousBest;
+      }
+
+      return e('div', { className: 'vpage-gameplay vpage-results-overlay' },
+        e('div', { className: 'vresults-screen animate-in' },
+          e('div', { className: 'vresults-scenario' }, 'STRAFE TRACKING — 3D — Complete'),
+          e('div', { className: 'vresults-grade', style: { color: grade.color || 'var(--accent-primary)' } },
+            e('span', { className: 'vresults-grade-letter' }, result.grade),
+            e('span', { className: 'vresults-grade-label' }, grade.label || ''),
+          ),
+          e('div', { className: 'vresults-score' },
+            e('span', { className: 'vresults-score-value' }, result.score),
+            e('span', { className: 'vresults-score-label' }, 'SCORE'),
+          ),
+          e('div', { className: tSaveClass }, tSaveLine),
+          e('div', { className: 'vresults-stats' },
+            [
+              [result.score, 'Score'],
+              [result.stats.trackingAccuracy + '%', 'Tracking Accuracy'],
+              [result.stats.timeOnTarget + '%', 'Time On Target'],
+              [result.stats.avgTrackingError + '°', 'Avg Tracking Error'],
+              [result.stats.hits, 'Hits'],
+              [result.stats.misses, 'Misses'],
+              [tShots, 'Shots Fired'],
+              [result.stats.bestTrackingStreak + 's', 'Best Tracking Streak'],
+              [result.stats.duration + 's', 'Duration'],
+              [diff && diff.label || '—', 'Difficulty'],
+              [weaponUsed, 'Weapon Used'],
+            ].map(function (pair) {
+              var value = pair[0], label = pair[1];
+              return e('div', { key: label, className: 'vresults-stat' },
+                e('span', { className: 'vresults-stat-value' }, value),
+                e('span', { className: 'vresults-stat-label' }, label),
+              );
+            })
+          ),
+          tSummary && e('div', { className: 'vresults-config' }, tSummary),
+          e('div', { className: 'vresults-actions' },
+            e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
+            e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
+            e(VantageUI.Button, { variant: 'primary', onClick: handlePlayAgain }, 'PLAY AGAIN'),
+          ),
+        ),
+      );
+    }
+
+    // Standard (Static Flick) results screen
+    var shots2 = result.stats.hits + result.stats.misses;
     const hitsPerSec = result.stats.duration > 0 ? (result.stats.hits / result.stats.duration).toFixed(2) : '0.00';
     const summary = [
       diff && diff.label,
@@ -398,7 +490,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             [result.stats.hits > 0 ? result.stats.avgReactionTime + 'ms' : '—', 'Avg Reaction'],
             [result.stats.hits, 'Hits'],
             [result.stats.misses, 'Misses'],
-            [shots, 'Shots'],
+            [shots2, 'Shots'],
             [result.stats.bestStreak, 'Best Streak'],
             [hitsPerSec, 'Hits / sec'],
             [result.stats.duration + 's', 'Duration'],
