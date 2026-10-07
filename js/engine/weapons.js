@@ -267,6 +267,7 @@ VantageEngine.Weapons = (function () {
 
   function makeMaterials(accent) {
     return {
+      woodMat: new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: 0.85, metalness: 0.05 }),
       darkMetal: new THREE.MeshStandardMaterial({ color: 0x2c2f35, roughness: 0.5, metalness: 0.25 }),
       medMetal: new THREE.MeshStandardMaterial({ color: 0x3d4048, roughness: 0.5, metalness: 0.25 }),
       lightMetal: new THREE.MeshStandardMaterial({ color: 0x5a5f69, roughness: 0.4, metalness: 0.3 }),
@@ -359,463 +360,287 @@ VantageEngine.Weapons = (function () {
     }
   }
 
-  /* --- Classic (standard pistol — the original model) --- */
+  /* ---------- Shape helpers for the model builders ---------- */
+  // box: w,h,d at x,y,z with optional rotations. cyl: runs along Z (barrel axis).
+  // NOTE: Z is forward (negative = toward the muzzle). Positive rx tilts a part's
+  // bottom toward the muzzle; negative rx tilts it back toward the shooter.
+  function box(g, mat, w, h, d, x, y, z, rx, ry, rz) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    if (rx) m.rotation.x = rx;
+    if (ry) m.rotation.y = ry;
+    if (rz) m.rotation.z = rz;
+    g.add(m);
+    return m;
+  }
+  // rFront is the radius at the muzzle (-z) end, rBack at the shooter (+z) end.
+  function cyl(g, mat, rFront, rBack, len, x, y, z, seg) {
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(rBack, rFront, len, seg || 12), mat);
+    m.rotation.x = Math.PI / 2;
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  }
+  function trigger(g, M, y, zGuardFront, zGuardBack, w) {
+    // Box-built trigger guard + trigger so the edge outlines pick them up.
+    var len = zGuardBack - zGuardFront;
+    box(g, M.medMetal, w, 0.005, len, 0, y - 0.02, (zGuardFront + zGuardBack) / 2);
+    box(g, M.medMetal, w, 0.024, 0.005, 0, y - 0.008, zGuardFront);
+    box(g, M.lightMetal, 0.005, 0.018, 0.006, 0, y - 0.004, zGuardBack - 0.012, 0.3);
+  }
+
+  /* --- Classic: slim blocky sidearm, dark slide on a lighter frame --- */
   function buildClassic(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Receiver
-    var bodyGeo = new THREE.BoxGeometry(0.045, 0.06, 0.22);
-    var body = new THREE.Mesh(bodyGeo, M.medMetal);
-    body.position.set(0, 0, -0.04);
-    group.add(body);
-    // Slide
-    var slideGeo = new THREE.BoxGeometry(0.04, 0.025, 0.24);
-    var slide = new THREE.Mesh(slideGeo, M.darkMetal);
-    slide.position.set(0, 0.042, -0.04);
-    group.add(slide);
-    // Barrel
-    var barrelGeo = new THREE.CylinderGeometry(0.008, 0.009, 0.14, 8);
-    var barrel = new THREE.Mesh(barrelGeo, M.lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.025, -0.24);
-    group.add(barrel);
-    // Shroud
-    var shroudGeo = new THREE.BoxGeometry(0.035, 0.035, 0.1);
-    var shroud = new THREE.Mesh(shroudGeo, M.darkMetal);
-    shroud.position.set(0, 0.025, -0.2);
-    group.add(shroud);
-    // Grip
-    var gripGeo = new THREE.BoxGeometry(0.038, 0.09, 0.045);
-    var grip = new THREE.Mesh(gripGeo, M.gripMat);
-    grip.position.set(0, -0.065, 0.04);
-    grip.rotation.x = 0.2;
-    group.add(grip);
-    // Magazine
-    var magGeo = new THREE.BoxGeometry(0.03, 0.055, 0.035);
-    var mag = new THREE.Mesh(magGeo, M.darkMetal);
-    mag.position.set(0, -0.06, 0.01);
-    group.add(mag);
-    // Trigger guard
-    var guardGeo = new THREE.TorusGeometry(0.018, 0.003, 6, 12, Math.PI);
-    var guard = new THREE.Mesh(guardGeo, M.medMetal);
-    guard.position.set(0, -0.035, -0.01);
-    guard.rotation.y = Math.PI / 2;
-    group.add(guard);
-    // Accent line
-    var accentGeo = new THREE.BoxGeometry(0.042, 0.003, 0.06);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.055, -0.08);
-    group.add(accent);
+    // Lighter frame with under-barrel rail
+    box(group, M.lightMetal, 0.036, 0.034, 0.17, 0, -0.012, -0.03);
+    box(group, M.darkMetal, 0.028, 0.008, 0.07, 0, -0.033, -0.075);
+    // Slide + ejection port
+    box(group, M.darkMetal, 0.036, 0.036, 0.21, 0, 0.024, -0.05);
+    box(group, M.gripMat, 0.004, 0.014, 0.05, 0.0185, 0.03, -0.03);
+    // Slide serrations (rear and front)
+    for (var i = 0; i < 4; i++) box(group, M.medMetal, 0.038, 0.03, 0.003, 0, 0.026, 0.025 + i * 0.008);
+    for (var j = 0; j < 3; j++) box(group, M.medMetal, 0.038, 0.03, 0.003, 0, 0.026, -0.13 - j * 0.008);
+    // Barrel tip
+    cyl(group, M.lightMetal, 0.0075, 0.0075, 0.03, 0, 0.024, -0.168, 10);
+    // Grip, leaning back like a real handgun
+    box(group, M.gripMat, 0.036, 0.095, 0.05, 0, -0.075, 0.035, -0.2);
+    box(group, M.darkMetal, 0.034, 0.008, 0.052, 0, -0.123, 0.045, -0.2);
+    // Hammer + trigger group
+    box(group, M.darkMetal, 0.006, 0.012, 0.012, 0, 0.038, 0.052);
+    trigger(group, M, -0.03, -0.045, -0.005, 0.006);
+    // Accent
+    box(group, M.accentMat, 0.038, 0.003, 0.05, 0, 0.043, -0.09);
     // Sights
-    var fSightGeo = new THREE.BoxGeometry(0.005, 0.012, 0.005);
-    var fSight = new THREE.Mesh(fSightGeo, M.darkMetal);
-    fSight.position.set(0, 0.062, -0.15);
-    group.add(fSight);
-    var rSightGeo = new THREE.BoxGeometry(0.025, 0.01, 0.008);
-    var rSight = new THREE.Mesh(rSightGeo, M.darkMetal);
-    rSight.position.set(0, 0.06, 0.05);
-    group.add(rSight);
+    box(group, M.darkMetal, 0.005, 0.01, 0.008, 0, 0.047, -0.145);
+    box(group, M.darkMetal, 0.007, 0.01, 0.008, -0.01, 0.046, 0.04);
+    box(group, M.darkMetal, 0.007, 0.01, 0.008, 0.01, 0.046, 0.04);
 
     addHand(group, M, -0.065, 0.04);
     var mf = addMuzzleFlash(group, weapon);
+    mf.flash.position.set(0, 0.024, -0.2);
+    mf.flash2.position.set(0, 0.024, -0.2);
     addEdgeOutlines(group);
     disableRaycast(group);
-
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };
   }
 
-  /* --- Vandal (assault rifle) --- */
+  /* --- Vandal: AK-style rifle — banana mag, gas tube, wood furniture --- */
   function buildVandal(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Main receiver (longer, wider)
-    var bodyGeo = new THREE.BoxGeometry(0.05, 0.065, 0.34);
-    var body = new THREE.Mesh(bodyGeo, M.medMetal);
-    body.position.set(0, 0, -0.06);
-    group.add(body);
-    // Upper receiver / rail
-    var railGeo = new THREE.BoxGeometry(0.042, 0.018, 0.30);
-    var rail = new THREE.Mesh(railGeo, M.darkMetal);
-    rail.position.set(0, 0.042, -0.06);
-    group.add(rail);
-    // Barrel
-    var barrelGeo = new THREE.CylinderGeometry(0.009, 0.010, 0.20, 8);
-    var barrel = new THREE.Mesh(barrelGeo, M.lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.020, -0.33);
-    group.add(barrel);
-    // Barrel shroud / handguard
-    var hgGeo = new THREE.BoxGeometry(0.042, 0.042, 0.16);
-    var hg = new THREE.Mesh(hgGeo, M.darkMetal);
-    hg.position.set(0, 0.015, -0.26);
-    group.add(hg);
-    // Magazine (curved)
-    var magGeo = new THREE.BoxGeometry(0.032, 0.09, 0.04);
-    var mag = new THREE.Mesh(magGeo, M.darkMetal);
-    mag.position.set(0, -0.07, -0.04);
-    mag.rotation.x = 0.12;
-    group.add(mag);
-    // Grip
-    var gripGeo = new THREE.BoxGeometry(0.035, 0.07, 0.035);
-    var grip = new THREE.Mesh(gripGeo, M.gripMat);
-    grip.position.set(0, -0.065, 0.06);
-    grip.rotation.x = 0.25;
-    group.add(grip);
-    // Stock
-    var stockGeo = new THREE.BoxGeometry(0.04, 0.05, 0.12);
-    var stock = new THREE.Mesh(stockGeo, M.darkMetal);
-    stock.position.set(0, 0.01, 0.18);
-    group.add(stock);
-    var stockEnd = new THREE.BoxGeometry(0.042, 0.065, 0.02);
-    var stockEndM = new THREE.Mesh(stockEnd, M.medMetal);
-    stockEndM.position.set(0, 0.01, 0.24);
-    group.add(stockEndM);
-    // Accent stripe
-    var accentGeo = new THREE.BoxGeometry(0.052, 0.003, 0.12);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.052, -0.10);
-    group.add(accent);
-    // Front sight
-    var fSightGeo = new THREE.BoxGeometry(0.005, 0.015, 0.005);
-    var fSight = new THREE.Mesh(fSightGeo, M.darkMetal);
-    fSight.position.set(0, 0.06, -0.22);
-    group.add(fSight);
-    // Rear sight
-    var rSightGeo = new THREE.BoxGeometry(0.03, 0.012, 0.008);
-    var rSight = new THREE.Mesh(rSightGeo, M.darkMetal);
-    rSight.position.set(0, 0.058, 0.04);
-    group.add(rSight);
-
-    // Hand (holding grip, more forward for rifle)
-    addHand(group, M, -0.065, 0.06);
-    // Support hand on handguard
-    var spGeo = new THREE.BoxGeometry(0.05, 0.035, 0.06);
-    var sp = new THREE.Mesh(spGeo, M.skinMat);
-    sp.position.set(0, -0.01, -0.22);
-    group.add(sp);
+    // Receiver + dust cover
+    box(group, M.darkMetal, 0.044, 0.056, 0.22, 0, 0, -0.02);
+    box(group, M.medMetal, 0.040, 0.010, 0.20, 0, 0.033, -0.02);
+    // Wood handguards (lower + upper) and gas tube above the barrel
+    box(group, M.woodMat, 0.046, 0.040, 0.12, 0, -0.008, -0.20);
+    box(group, M.woodMat, 0.038, 0.018, 0.12, 0, 0.026, -0.20);
+    cyl(group, M.lightMetal, 0.008, 0.008, 0.14, 0, 0.042, -0.20, 8);
+    // Barrel, gas block, slanted front sight, muzzle device
+    cyl(group, M.lightMetal, 0.0085, 0.0085, 0.20, 0, 0.012, -0.34, 8);
+    box(group, M.darkMetal, 0.014, 0.026, 0.016, 0, 0.026, -0.31);
+    box(group, M.darkMetal, 0.004, 0.022, 0.006, 0, 0.05, -0.31, 0.25);
+    cyl(group, M.darkMetal, 0.012, 0.012, 0.03, 0, 0.012, -0.43, 8);
+    // Banana magazine (curves toward the muzzle)
     for (var i = 0; i < 4; i++) {
-      var fg = new THREE.BoxGeometry(0.011, 0.012, 0.035);
-      var f = new THREE.Mesh(fg, M.skinMat);
-      f.position.set(-0.016 + i * 0.011, -0.03, -0.22);
-      group.add(f);
+      box(group, M.darkMetal, 0.03, 0.036, 0.042,
+          0, -0.05 - i * 0.032, -0.07 - i * 0.012 - i * i * 0.003, 0.14 + i * 0.12);
     }
+    // Pistol grip + trigger group
+    box(group, M.gripMat, 0.034, 0.075, 0.036, 0, -0.065, 0.075, -0.35);
+    trigger(group, M, -0.028, -0.04, 0.02, 0.006);
+    // Stock (wood) + buttplate
+    box(group, M.woodMat, 0.036, 0.055, 0.17, 0, -0.012, 0.19, -0.05);
+    box(group, M.darkMetal, 0.038, 0.07, 0.014, 0, -0.016, 0.28, -0.05);
+    // Accent + rear sight
+    box(group, M.accentMat, 0.046, 0.003, 0.05, 0, 0.0295, -0.14);
+    box(group, M.darkMetal, 0.022, 0.010, 0.010, 0, 0.044, -0.05);
+
+    addHand(group, M, -0.065, 0.075);
+    box(group, M.skinMat, 0.05, 0.035, 0.06, 0, -0.03, -0.20);
+    for (var f = 0; f < 4; f++) box(group, M.skinMat, 0.011, 0.012, 0.035, -0.016 + f * 0.011, -0.05, -0.20);
 
     var mf = addMuzzleFlash(group, weapon);
+    mf.flash.position.set(0, 0.012, -0.47);
+    mf.flash2.position.set(0, 0.012, -0.47);
     addEdgeOutlines(group);
     disableRaycast(group);
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };
   }
 
-  /* --- Phantom (suppressed rifle) --- */
+  /* --- Phantom: sleek suppressed carbine — finned suppressor, rails, cheek stock --- */
   function buildPhantom(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Receiver (slightly shorter than Vandal)
-    var bodyGeo = new THREE.BoxGeometry(0.048, 0.060, 0.30);
-    var body = new THREE.Mesh(bodyGeo, M.medMetal);
-    body.position.set(0, 0, -0.05);
-    group.add(body);
-    // Upper rail
-    var railGeo = new THREE.BoxGeometry(0.040, 0.016, 0.26);
-    var rail = new THREE.Mesh(railGeo, M.darkMetal);
-    rail.position.set(0, 0.040, -0.05);
-    group.add(rail);
-    // Suppressor (large cylinder)
-    var suppGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.14, 12);
-    var supp = new THREE.Mesh(suppGeo, M.darkMetal);
-    supp.rotation.x = Math.PI / 2;
-    supp.position.set(0, 0.018, -0.32);
-    group.add(supp);
-    // Suppressor rings
-    for (var r = 0; r < 3; r++) {
-      var ringGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.006, 12);
-      var ring = new THREE.Mesh(ringGeo, M.lightMetal);
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(0, 0.018, -0.27 - r * 0.04);
-      group.add(ring);
-    }
+    // Receiver + long top rail with teeth
+    box(group, M.medMetal, 0.044, 0.058, 0.22, 0, 0, -0.02);
+    box(group, M.darkMetal, 0.036, 0.012, 0.32, 0, 0.035, -0.08);
+    for (var t = 0; t < 9; t++) box(group, M.lightMetal, 0.038, 0.004, 0.008, 0, 0.043, -0.2 + t * 0.03);
     // Handguard
-    var hgGeo = new THREE.BoxGeometry(0.040, 0.040, 0.12);
-    var hg = new THREE.Mesh(hgGeo, M.darkMetal);
-    hg.position.set(0, 0.012, -0.22);
-    group.add(hg);
-    // Magazine
-    var magGeo = new THREE.BoxGeometry(0.030, 0.085, 0.038);
-    var mag = new THREE.Mesh(magGeo, M.darkMetal);
-    mag.position.set(0, -0.068, -0.03);
-    mag.rotation.x = 0.10;
-    group.add(mag);
-    // Grip
-    var gripGeo = new THREE.BoxGeometry(0.034, 0.065, 0.034);
-    var grip = new THREE.Mesh(gripGeo, M.gripMat);
-    grip.position.set(0, -0.062, 0.06);
-    grip.rotation.x = 0.25;
-    group.add(grip);
-    // Stock (collapsible look)
-    var stockGeo = new THREE.BoxGeometry(0.035, 0.045, 0.10);
-    var stock = new THREE.Mesh(stockGeo, M.darkMetal);
-    stock.position.set(0, 0.008, 0.16);
-    group.add(stock);
-    // Accent
-    var accentGeo = new THREE.BoxGeometry(0.050, 0.003, 0.10);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.050, -0.08);
-    group.add(accent);
-    // Sights
-    var fSightGeo = new THREE.BoxGeometry(0.005, 0.013, 0.005);
-    var fSight = new THREE.Mesh(fSightGeo, M.darkMetal);
-    fSight.position.set(0, 0.057, -0.18);
-    group.add(fSight);
-    var rSightGeo = new THREE.BoxGeometry(0.028, 0.011, 0.008);
-    var rSight = new THREE.Mesh(rSightGeo, M.darkMetal);
-    rSight.position.set(0, 0.055, 0.04);
-    group.add(rSight);
+    box(group, M.darkMetal, 0.042, 0.046, 0.14, 0, 0.0, -0.19);
+    box(group, M.medMetal, 0.044, 0.01, 0.1, 0, -0.026, -0.19);
+    // Integrated suppressor with fins and vents
+    cyl(group, M.darkMetal, 0.02, 0.02, 0.16, 0, 0.012, -0.33, 14);
+    for (var r = 0; r < 4; r++) cyl(group, M.lightMetal, 0.0225, 0.0225, 0.006, 0, 0.012, -0.275 - r * 0.035, 14);
+    cyl(group, M.gripMat, 0.012, 0.012, 0.012, 0, 0.012, -0.413, 10);
+    // Magazine (gentle curve)
+    box(group, M.darkMetal, 0.03, 0.05, 0.04, 0, -0.05, -0.03, 0.05);
+    box(group, M.darkMetal, 0.03, 0.05, 0.04, 0, -0.095, -0.04, 0.2);
+    // Grip + trigger
+    box(group, M.gripMat, 0.034, 0.07, 0.034, 0, -0.065, 0.065, -0.3);
+    trigger(group, M, -0.028, -0.04, 0.02, 0.006);
+    // Buffer tube, stock body, cheek riser
+    cyl(group, M.darkMetal, 0.014, 0.014, 0.1, 0, 0.005, 0.15, 10);
+    box(group, M.darkMetal, 0.036, 0.062, 0.09, 0, -0.005, 0.235, -0.08);
+    box(group, M.medMetal, 0.034, 0.016, 0.08, 0, 0.034, 0.22);
+    box(group, M.gripMat, 0.038, 0.066, 0.012, 0, -0.008, 0.285, -0.08);
+    // Accent + flip-up sights
+    box(group, M.accentMat, 0.046, 0.003, 0.1, 0, 0.0305, -0.10);
+    box(group, M.darkMetal, 0.005, 0.016, 0.006, 0, 0.056, -0.25);
+    box(group, M.darkMetal, 0.024, 0.014, 0.008, 0, 0.054, 0.04);
 
-    addHand(group, M, -0.062, 0.06);
-    var spGeo = new THREE.BoxGeometry(0.048, 0.032, 0.055);
-    var sp = new THREE.Mesh(spGeo, M.skinMat);
-    sp.position.set(0, -0.008, -0.20);
-    group.add(sp);
+    addHand(group, M, -0.062, 0.065);
+    box(group, M.skinMat, 0.048, 0.032, 0.055, 0, -0.03, -0.20);
 
     var mf = addMuzzleFlash(group, weapon);
-    // Move flash to end of suppressor
-    if (mf.flash) mf.flash.position.set(0, 0.018, -0.40);
-    if (mf.flash2) mf.flash2.position.set(0, 0.018, -0.40);
+    mf.flash.position.set(0, 0.012, -0.44);
+    mf.flash2.position.set(0, 0.012, -0.44);
     addEdgeOutlines(group);
     disableRaycast(group);
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };
   }
 
-  /* --- Sheriff (heavy revolver) --- */
+  /* --- Sheriff: big magnum revolver — fluted cylinder, underlug, wood grip --- */
   function buildSheriff(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Frame
-    var frameGeo = new THREE.BoxGeometry(0.048, 0.055, 0.14);
-    var frame = new THREE.Mesh(frameGeo, M.medMetal);
-    frame.position.set(0, 0, -0.02);
-    group.add(frame);
-    // Cylinder (revolver chamber)
-    var cylGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.04, 12);
-    var cyl = new THREE.Mesh(cylGeo, M.lightMetal);
-    cyl.rotation.z = Math.PI / 2;
-    cyl.position.set(0, 0.005, -0.06);
-    group.add(cyl);
-    // Barrel (long)
-    var barrelGeo = new THREE.CylinderGeometry(0.010, 0.011, 0.18, 8);
-    var barrel = new THREE.Mesh(barrelGeo, M.lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.015, -0.20);
-    group.add(barrel);
-    // Barrel shroud
-    var shroudGeo = new THREE.BoxGeometry(0.035, 0.030, 0.14);
-    var shroud = new THREE.Mesh(shroudGeo, M.darkMetal);
-    shroud.position.set(0, 0.012, -0.16);
-    group.add(shroud);
-    // Top strap
-    var strapGeo = new THREE.BoxGeometry(0.020, 0.008, 0.16);
-    var strap = new THREE.Mesh(strapGeo, M.darkMetal);
-    strap.position.set(0, 0.035, -0.12);
-    group.add(strap);
-    // Grip (wood-like)
-    var gripMat = new THREE.MeshStandardMaterial({ color: 0x4a3328, roughness: 0.85, metalness: 0.05 });
-    var gripGeo = new THREE.BoxGeometry(0.040, 0.10, 0.045);
-    var grip = new THREE.Mesh(gripGeo, gripMat);
-    grip.position.set(0, -0.072, 0.04);
-    grip.rotation.x = 0.3;
-    group.add(grip);
-    // Hammer
-    var hamGeo = new THREE.BoxGeometry(0.008, 0.020, 0.015);
-    var ham = new THREE.Mesh(hamGeo, M.darkMetal);
-    ham.position.set(0, 0.040, 0.04);
-    group.add(ham);
-    // Trigger guard
-    var guardGeo = new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI);
-    var guard = new THREE.Mesh(guardGeo, M.medMetal);
-    guard.position.set(0, -0.035, -0.01);
-    guard.rotation.y = Math.PI / 2;
-    group.add(guard);
-    // Accent line
-    var accentGeo = new THREE.BoxGeometry(0.050, 0.003, 0.04);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.040, -0.02);
-    group.add(accent);
-    // Front sight
-    var fSightGeo = new THREE.BoxGeometry(0.005, 0.014, 0.005);
-    var fSight = new THREE.Mesh(fSightGeo, M.darkMetal);
-    fSight.position.set(0, 0.048, -0.24);
-    group.add(fSight);
+    // Frame + top strap
+    box(group, M.medMetal, 0.04, 0.058, 0.10, 0, 0.0, 0.0);
+    box(group, M.darkMetal, 0.026, 0.01, 0.12, 0, 0.034, -0.04);
+    // Fluted cylinder (6 flutes)
+    cyl(group, M.lightMetal, 0.027, 0.027, 0.06, 0, 0.008, -0.07, 14);
+    for (var i = 0; i < 6; i++) {
+      var a = (i / 6) * Math.PI * 2;
+      box(group, M.darkMetal, 0.007, 0.007, 0.05, Math.cos(a) * 0.027, 0.008 + Math.sin(a) * 0.027, -0.07, 0, 0, a);
+    }
+    // Heavy barrel, top rib, underlug + ejector rod
+    cyl(group, M.lightMetal, 0.0105, 0.0105, 0.17, 0, 0.02, -0.20, 10);
+    box(group, M.darkMetal, 0.012, 0.008, 0.17, 0, 0.034, -0.20);
+    cyl(group, M.darkMetal, 0.011, 0.011, 0.12, 0, -0.008, -0.18, 10);
+    cyl(group, M.lightMetal, 0.004, 0.004, 0.10, 0, -0.024, -0.18, 6);
+    // Sights + big hammer
+    box(group, M.darkMetal, 0.005, 0.014, 0.006, 0, 0.046, -0.28);
+    box(group, M.darkMetal, 0.018, 0.008, 0.01, 0, 0.044, 0.03);
+    box(group, M.darkMetal, 0.01, 0.03, 0.014, 0, 0.038, 0.06, -0.5);
+    // Wood grip + steel butt cap
+    box(group, M.woodMat, 0.042, 0.105, 0.05, 0, -0.078, 0.05, -0.3);
+    box(group, M.darkMetal, 0.044, 0.012, 0.056, 0, -0.132, 0.062, -0.3);
+    trigger(group, M, -0.03, -0.035, 0.0, 0.006);
+    // Brass-toned accent bands
+    box(group, M.accentMat, 0.042, 0.004, 0.04, 0, 0.0305, 0.0);
+    box(group, M.accentMat, 0.044, 0.004, 0.012, 0, 0.008, -0.1);
 
-    addHand(group, M, -0.072, 0.04);
+    addHand(group, M, -0.072, 0.05);
     var mf = addMuzzleFlash(group, weapon);
+    mf.flash.position.set(0, 0.02, -0.31);
+    mf.flash2.position.set(0, 0.02, -0.31);
     addEdgeOutlines(group);
     disableRaycast(group);
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };
   }
 
-  /* --- Ghost (compact suppressed pistol) --- */
+  /* --- Ghost: slim pistol with a long integrated suppressor --- */
   function buildGhost(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Slide (compact)
-    var slideGeo = new THREE.BoxGeometry(0.036, 0.028, 0.18);
-    var slide = new THREE.Mesh(slideGeo, M.darkMetal);
-    slide.position.set(0, 0.038, -0.04);
-    group.add(slide);
-    // Frame / receiver (shorter)
-    var bodyGeo = new THREE.BoxGeometry(0.038, 0.048, 0.14);
-    var body = new THREE.Mesh(bodyGeo, M.medMetal);
-    body.position.set(0, -0.002, -0.02);
-    group.add(body);
-    // Suppressor (integrated, slim)
-    var suppGeo = new THREE.CylinderGeometry(0.014, 0.014, 0.08, 10);
-    var supp = new THREE.Mesh(suppGeo, M.darkMetal);
-    supp.rotation.x = Math.PI / 2;
-    supp.position.set(0, 0.020, -0.20);
-    group.add(supp);
-    // Barrel (internal, short)
-    var barrelGeo = new THREE.CylinderGeometry(0.006, 0.007, 0.08, 8);
-    var barrel = new THREE.Mesh(barrelGeo, M.lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.020, -0.14);
-    group.add(barrel);
-    // Grip (compact)
-    var gripGeo = new THREE.BoxGeometry(0.034, 0.075, 0.038);
-    var grip = new THREE.Mesh(gripGeo, M.gripMat);
-    grip.position.set(0, -0.058, 0.03);
-    grip.rotation.x = 0.18;
-    group.add(grip);
-    // Magazine
-    var magGeo = new THREE.BoxGeometry(0.026, 0.045, 0.028);
-    var mag = new THREE.Mesh(magGeo, M.darkMetal);
-    mag.position.set(0, -0.050, 0.01);
-    group.add(mag);
+    // Slide with top vents, frame below
+    box(group, M.darkMetal, 0.030, 0.032, 0.20, 0, 0.03, -0.06);
+    for (var v = 0; v < 3; v++) box(group, M.lightMetal, 0.020, 0.003, 0.016, 0, 0.0475, -0.02 - v * 0.03);
+    box(group, M.medMetal, 0.030, 0.032, 0.14, 0, -0.005, -0.03);
+    box(group, M.darkMetal, 0.024, 0.008, 0.06, 0, -0.026, -0.07);
+    // Integrated suppressor: tube, rings, end cap
+    cyl(group, M.darkMetal, 0.0135, 0.0135, 0.10, 0, 0.027, -0.21, 12);
+    for (var r = 0; r < 3; r++) cyl(group, M.lightMetal, 0.015, 0.015, 0.005, 0, 0.027, -0.17 - r * 0.03, 12);
+    cyl(group, M.gripMat, 0.008, 0.008, 0.008, 0, 0.027, -0.264, 8);
+    // Angled grip + magazine base
+    box(group, M.gripMat, 0.032, 0.085, 0.04, 0, -0.062, 0.03, -0.22);
+    box(group, M.darkMetal, 0.030, 0.008, 0.044, 0, -0.108, 0.04, -0.22);
+    trigger(group, M, -0.024, -0.04, 0.0, 0.005);
     // Accent
-    var accentGeo = new THREE.BoxGeometry(0.038, 0.003, 0.05);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.054, -0.06);
-    group.add(accent);
-    // Sights (low profile)
-    var fSightGeo = new THREE.BoxGeometry(0.004, 0.008, 0.004);
-    var fSight = new THREE.Mesh(fSightGeo, M.darkMetal);
-    fSight.position.set(0, 0.058, -0.12);
-    group.add(fSight);
-    var rSightGeo = new THREE.BoxGeometry(0.020, 0.008, 0.006);
-    var rSight = new THREE.Mesh(rSightGeo, M.darkMetal);
-    rSight.position.set(0, 0.056, 0.04);
-    group.add(rSight);
+    box(group, M.accentMat, 0.032, 0.003, 0.05, 0, 0.0475, -0.12);
+    // Tall sights to clear the suppressor
+    box(group, M.darkMetal, 0.004, 0.012, 0.005, 0, 0.056, -0.10);
+    box(group, M.darkMetal, 0.020, 0.010, 0.006, 0, 0.052, 0.03);
 
     addHand(group, M, -0.058, 0.03);
     var mf = addMuzzleFlash(group, weapon);
-    if (mf.flash) mf.flash.position.set(0, 0.020, -0.25);
-    if (mf.flash2) mf.flash2.position.set(0, 0.020, -0.25);
+    mf.flash.position.set(0, 0.027, -0.285);
+    mf.flash2.position.set(0, 0.027, -0.285);
     addEdgeOutlines(group);
     disableRaycast(group);
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };
   }
 
-  /* --- Operator (bolt-action sniper) --- */
+  /* --- Operator: bolt-action sniper — big scope, muzzle brake, chunky stock --- */
   function buildOperator(weapon) {
     var group = new THREE.Group();
     var M = makeMaterials(weapon.accentColor);
 
-    // Long receiver
-    var bodyGeo = new THREE.BoxGeometry(0.048, 0.058, 0.40);
-    var body = new THREE.Mesh(bodyGeo, M.medMetal);
-    body.position.set(0, 0, -0.08);
-    group.add(body);
-    // Bolt handle
-    var boltGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.04, 8);
-    var bolt = new THREE.Mesh(boltGeo, M.lightMetal);
-    bolt.rotation.z = Math.PI / 2;
-    bolt.position.set(0.03, 0.02, 0.02);
-    group.add(bolt);
-    var knobGeo = new THREE.SphereGeometry(0.012, 8, 8);
-    var knob = new THREE.Mesh(knobGeo, M.lightMetal);
-    knob.position.set(0.05, 0.02, 0.02);
-    group.add(knob);
-    // Long barrel
-    var barrelGeo = new THREE.CylinderGeometry(0.010, 0.012, 0.35, 8);
-    var barrel = new THREE.Mesh(barrelGeo, M.lightMetal);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.015, -0.45);
-    group.add(barrel);
-    // Barrel shroud
-    var shroudGeo = new THREE.BoxGeometry(0.038, 0.038, 0.18);
-    var shroud = new THREE.Mesh(shroudGeo, M.darkMetal);
-    shroud.position.set(0, 0.012, -0.32);
-    group.add(shroud);
-    // Scope (prominent)
-    var scopeBodyGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.16, 12);
-    var scopeBody = new THREE.Mesh(scopeBodyGeo, M.darkMetal);
-    scopeBody.rotation.x = Math.PI / 2;
-    scopeBody.position.set(0, 0.065, -0.06);
-    group.add(scopeBody);
-    // Scope lens (front)
-    var lensGeo = new THREE.CylinderGeometry(0.020, 0.020, 0.008, 12);
+    // Receiver + magazine
+    box(group, M.medMetal, 0.046, 0.058, 0.34, 0, 0, -0.02);
+    box(group, M.darkMetal, 0.032, 0.06, 0.05, 0, -0.058, -0.03);
+    // Barrel inside a heavy cylindrical shroud, underside rail
+    cyl(group, M.lightMetal, 0.011, 0.011, 0.38, 0, 0.012, -0.37, 10);
+    cyl(group, M.darkMetal, 0.017, 0.017, 0.22, 0, 0.012, -0.30, 12);
+    box(group, M.darkMetal, 0.016, 0.01, 0.16, 0, -0.012, -0.30);
+    // Muzzle brake with slots
+    box(group, M.darkMetal, 0.028, 0.028, 0.06, 0, 0.012, -0.55);
+    for (var s = 0; s < 2; s++) box(group, M.gripMat, 0.03, 0.006, 0.01, 0, 0.012, -0.54 - s * 0.02);
+    // Scope: mounts, tube, front bell, eyepiece, front lens, turrets
+    box(group, M.medMetal, 0.016, 0.022, 0.02, 0, 0.046, -0.10);
+    box(group, M.medMetal, 0.016, 0.022, 0.02, 0, 0.046, 0.02);
+    cyl(group, M.darkMetal, 0.02, 0.02, 0.20, 0, 0.07, -0.04, 14);
+    cyl(group, M.darkMetal, 0.028, 0.02, 0.05, 0, 0.07, -0.165, 14);
+    cyl(group, M.darkMetal, 0.02, 0.026, 0.04, 0, 0.07, 0.07, 14);
     var lensMat = new THREE.MeshBasicMaterial({ color: 0x334466, transparent: true, opacity: 0.6 });
-    var lens = new THREE.Mesh(lensGeo, lensMat);
-    lens.rotation.x = Math.PI / 2;
-    lens.position.set(0, 0.065, -0.14);
-    group.add(lens);
-    // Scope rings
-    for (var sr = 0; sr < 2; sr++) {
-      var srGeo = new THREE.CylinderGeometry(0.021, 0.021, 0.012, 12);
-      var srMesh = new THREE.Mesh(srGeo, M.medMetal);
-      srMesh.rotation.x = Math.PI / 2;
-      srMesh.position.set(0, 0.065, -0.02 + sr * 0.08);
-      group.add(srMesh);
-    }
-    // Magazine
-    var magGeo = new THREE.BoxGeometry(0.032, 0.06, 0.05);
-    var mag = new THREE.Mesh(magGeo, M.darkMetal);
-    mag.position.set(0, -0.058, -0.04);
-    group.add(mag);
-    // Grip
-    var gripGeo = new THREE.BoxGeometry(0.034, 0.075, 0.036);
-    var grip = new THREE.Mesh(gripGeo, M.gripMat);
-    grip.position.set(0, -0.065, 0.06);
-    grip.rotation.x = 0.22;
-    group.add(grip);
-    // Stock (long)
-    var stockGeo = new THREE.BoxGeometry(0.042, 0.055, 0.18);
-    var stock = new THREE.Mesh(stockGeo, M.darkMetal);
-    stock.position.set(0, 0.005, 0.24);
-    group.add(stock);
-    // Buttpad
-    var padGeo = new THREE.BoxGeometry(0.044, 0.065, 0.015);
-    var pad = new THREE.Mesh(padGeo, M.gripMat);
-    pad.position.set(0, 0.005, 0.33);
-    group.add(pad);
-    // Accent stripe
-    var accentGeo = new THREE.BoxGeometry(0.050, 0.003, 0.14);
-    var accent = new THREE.Mesh(accentGeo, M.accentMat);
-    accent.position.set(0, 0.040, -0.10);
-    group.add(accent);
-    // Bipod (folded)
-    for (var bp = -1; bp <= 1; bp += 2) {
-      var bpGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.08, 6);
-      var bpMesh = new THREE.Mesh(bpGeo, M.lightMetal);
-      bpMesh.position.set(bp * 0.02, -0.03, -0.28);
-      bpMesh.rotation.z = bp * 0.15;
-      group.add(bpMesh);
-    }
+    cyl(group, lensMat, 0.026, 0.026, 0.006, 0, 0.07, -0.19, 14);
+    var topT = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 8), M.lightMetal);
+    topT.position.set(0, 0.098, -0.05);
+    group.add(topT);
+    var sideT = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 8), M.lightMetal);
+    sideT.rotation.z = Math.PI / 2;
+    sideT.position.set(0.027, 0.07, -0.05);
+    group.add(sideT);
+    // Bolt body, handle, knob
+    cyl(group, M.lightMetal, 0.01, 0.01, 0.06, 0, 0.018, 0.0, 8);
+    var handle = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6), M.lightMetal);
+    handle.rotation.z = Math.PI / 2 + 0.4;
+    handle.position.set(0.035, 0.008, 0.025);
+    group.add(handle);
+    var knob = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), M.lightMetal);
+    knob.position.set(0.057, -0.002, 0.025);
+    group.add(knob);
+    // Grip, chunky stock with cheek riser, buttpad
+    box(group, M.gripMat, 0.034, 0.08, 0.036, 0, -0.066, 0.075, -0.3);
+    trigger(group, M, -0.028, -0.04, 0.025, 0.006);
+    box(group, M.darkMetal, 0.044, 0.062, 0.17, 0, -0.004, 0.24, -0.04);
+    box(group, M.medMetal, 0.038, 0.022, 0.12, 0, 0.04, 0.23);
+    box(group, M.gripMat, 0.046, 0.074, 0.016, 0, -0.01, 0.335, -0.04);
+    // Accent
+    box(group, M.accentMat, 0.048, 0.003, 0.12, 0, 0.0305, -0.16);
 
-    addHand(group, M, -0.065, 0.06);
-    // Support hand forward
-    var spGeo = new THREE.BoxGeometry(0.048, 0.032, 0.055);
-    var sp = new THREE.Mesh(spGeo, M.skinMat);
-    sp.position.set(0, -0.01, -0.26);
-    group.add(sp);
+    addHand(group, M, -0.065, 0.075);
+    box(group, M.skinMat, 0.048, 0.032, 0.055, 0, -0.025, -0.26);
 
     var mf = addMuzzleFlash(group, weapon);
-    if (mf.flash) mf.flash.position.set(0, 0.015, -0.63);
-    if (mf.flash2) mf.flash2.position.set(0, 0.015, -0.63);
+    mf.flash.position.set(0, 0.012, -0.61);
+    mf.flash2.position.set(0, 0.012, -0.61);
     addEdgeOutlines(group);
     disableRaycast(group);
     return { group: group, muzzleFlash: mf.flash, muzzleFlash2: mf.flash2 };

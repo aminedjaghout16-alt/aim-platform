@@ -342,13 +342,13 @@ window.VantageComponents = window.VantageComponents || {};
           e('div', { className: 'vtm-swatches' },
             TARGET_COLORS.map((c) => e('button', {
               key: c.id, type: 'button', title: c.label, 'aria-label': c.label,
-              className: `vtm-swatch ${prefs.targetColor.toLowerCase() === c.id ? 'vtm-swatch-on' : ''}`,
+              className: `vtm-swatch ${String(prefs.targetColor || '').toLowerCase() === c.id ? 'vtm-swatch-on' : ''}`,
               style: { background: c.id },
               onClick: () => p.onPrefs({ targetColor: c.id }),
             })),
             e('label', { className: 'vtm-swatch vtm-swatch-custom', title: 'Custom color' },
               e('input', {
-                type: 'color', value: prefs.targetColor, 'aria-label': 'Custom target color',
+                type: 'color', value: prefs.targetColor || '#ff2d95', 'aria-label': 'Custom target color',
                 onChange: (ev) => p.onPrefs({ targetColor: ev.target.value }),
               }),
             ),

@@ -63,7 +63,7 @@ VantagePages.Settings = function Settings({ onNavigate, user, onLogout }) {
     { id: '#ffe600', label: 'Yellow' },
     { id: '#a64dff', label: 'Purple' },
   ];
-  var _tc = useState(VantageEngine.PlayerPrefs.get().targetColor);
+  var _tc = useState(VantageEngine.PlayerPrefs.get().targetColor || '#ff2d95');
   var targetColor = _tc[0];
   var setTargetColor = function (c) {
     VantageEngine.PlayerPrefs.set({ targetColor: c });
