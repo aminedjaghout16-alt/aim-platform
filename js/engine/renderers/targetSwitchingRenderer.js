@@ -73,104 +73,75 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
 
   /* ---------- Target spawning ---------- */
 
+  // Predefined spawn positions in a fixed rectangular area in front of the player.
+  // Grid: 5 columns (x) × 3 rows (y) × 2 depths (z) = 30 positions.
+  // All positions are in front of the player (negative z), within the arena.
+  _buildSpawnGrid() {
+    var cols = [-8, -4, 0, 4, 8];           // horizontal spread
+    var rows = [1.2, 2.2, 3.2];             // vertical spread (low, eye, high)
+    var depths = [-7, -13];                  // near, far (in front of player)
+
+    var grid = [];
+    for (var d = 0; d < depths.length; d++) {
+      for (var r = 0; r < rows.length; r++) {
+        for (var c = 0; c < cols.length; c++) {
+          grid.push({ x: cols[c], y: rows[r], z: depths[d] });
+        }
+      }
+    }
+    return grid;
+  }
+
+  // Get positions currently occupied by alive targets
+  _getOccupiedPositions() {
+    var occupied = [];
+    for (var i = 0; i < this._targets.length; i++) {
+      if (this._targets[i].alive) {
+        occupied.push(this._targets[i].spawnPos);
+      }
+    }
+    return occupied;
+  }
+
+  // Pick a random predefined position that is not currently occupied
+  _generateTSPosition() {
+    if (!this._spawnGrid) {
+      this._spawnGrid = this._buildSpawnGrid();
+    }
+
+    var occupied = this._getOccupiedPositions();
+    var available = [];
+
+    for (var i = 0; i < this._spawnGrid.length; i++) {
+      var pos = this._spawnGrid[i];
+      var isOccupied = false;
+      for (var j = 0; j < occupied.length; j++) {
+        var op = occupied[j];
+        if (Math.abs(pos.x - op.x) < 0.5 && Math.abs(pos.y - op.y) < 0.5 && Math.abs(pos.z - op.z) < 0.5) {
+          isOccupied = true;
+          break;
+        }
+      }
+      if (!isOccupied) {
+        available.push(pos);
+      }
+    }
+
+    // If all positions are occupied (shouldn't happen with 30 slots and 5 targets), pick any
+    if (available.length === 0) {
+      available = this._spawnGrid.slice();
+    }
+
+    // Pick a random available position
+    var chosen = available[Math.floor(Math.random() * available.length)];
+    return { x: chosen.x, y: chosen.y, z: chosen.z, distance: Math.abs(chosen.z), angle: 0 };
+  }
+
   _spawnInitialTargets() {
+    this._spawnGrid = this._buildSpawnGrid();
     for (var i = 0; i < this._targetCount; i++) {
       this._spawnSingleTarget(true);
     }
-  }
-
-  // Generate a position for target switching mode.
-  // Ensures variety: short/medium/long distances, varied heights, angular separation.
-  _generateTSPosition() {
-    var ARENA_HALF = this.constructor.ARENA_HALF;
-    var MIN_Y = this.constructor.ARENA_MIN_Y;
-    var MAX_Y = this.constructor.ARENA_MAX_Y;
-
-    // Distance zones: short, medium, long
-    var zones = [
-      { minDist: 4, maxDist: 7, weight: 0.30 },   // Close
-      { minDist: 7, maxDist: 12, weight: 0.40 },   // Mid
-      { minDist: 12, maxDist: 17, weight: 0.30 },  // Far
-    ];
-
-    // Select zone
-    var totalWeight = zones.reduce(function (sum, z) { return sum + z.weight; }, 0);
-    var rand = Math.random() * totalWeight;
-    var selectedZone = zones[0];
-    for (var i = 0; i < zones.length; i++) {
-      rand -= zones[i].weight;
-      if (rand <= 0) { selectedZone = zones[i]; break; }
-    }
-
-    var distance = selectedZone.minDist + Math.random() * (selectedZone.maxDist - selectedZone.minDist);
-
-    // Full 360° angle (targets all around the player)
-    var angle = Math.random() * Math.PI * 2;
-
-    var x = Math.sin(angle) * distance;
-    var z = -Math.cos(angle) * distance;
-
-    // Height: varied, weighted toward eye level but including low and high
-    var heightZones = [
-      { min: 0.5, max: 1.2, weight: 0.15 },
-      { min: 1.2, max: 2.2, weight: 0.45 },
-      { min: 2.2, max: 3.2, weight: 0.25 },
-      { min: 3.2, max: 4.2, weight: 0.15 },
-    ];
-    var totalHW = heightZones.reduce(function (sum, z) { return sum + z.weight; }, 0);
-    var hRand = Math.random() * totalHW;
-    var selectedHZ = heightZones[0];
-    for (var j = 0; j < heightZones.length; j++) {
-      hRand -= heightZones[j].weight;
-      if (hRand <= 0) { selectedHZ = heightZones[j]; break; }
-    }
-    var y = selectedHZ.min + Math.random() * (selectedHZ.max - selectedHZ.min);
-
-    // Clamp to arena
-    x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, x));
-    z = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, z));
-    y = Math.max(MIN_Y, Math.min(MAX_Y, y));
-
-    // Ensure minimum separation from existing recent positions
-    var maxAttempts = 25;
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      var tooClose = false;
-      for (var k = 0; k < this._tsRecentPositions.length; k++) {
-        var rp = this._tsRecentPositions[k];
-        var dx = x - rp.x;
-        var dz = z - rp.z;
-        var sep = Math.sqrt(dx * dx + dz * dz);
-        if (sep < 2.5) { tooClose = true; break; }
-      }
-      if (!tooClose) break;
-
-      // Regenerate
-      angle = Math.random() * Math.PI * 2;
-      distance = selectedZone.minDist + Math.random() * (selectedZone.maxDist - selectedZone.minDist);
-      x = Math.sin(angle) * distance;
-      z = -Math.cos(angle) * distance;
-      x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, x));
-      z = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, z));
-    }
-
-    // Also ensure separation from currently alive targets
-    for (var a = 0; a < this._targets.length; a++) {
-      var t = this._targets[a];
-      if (!t.alive) continue;
-      var tdx = x - t.mesh.position.x;
-      var tdz = z - t.mesh.position.z;
-      var tSep = Math.sqrt(tdx * tdx + tdz * tdz);
-      if (tSep < 2.0) {
-        // Nudge the position
-        angle += 0.4;
-        x = Math.sin(angle) * distance;
-        z = -Math.cos(angle) * distance;
-        x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, x));
-        z = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, z));
-      }
-    }
-
-    return { x: x, y: y, z: z, distance: distance, angle: angle };
   }
 
   _spawnSingleTarget(isInitial) {
@@ -382,10 +353,7 @@ VantageEngine.Renderers.TargetSwitchingRenderer = class TargetSwitchingRenderer 
           if (t.innerRing) t.innerRing.lookAt(localCamPos);
         }
 
-        // Subtle hover bob
-        var bobSpeed = 0.0025;
-        var bobAmount = 0.03; // Slightly less bob than static flick for stability
-        t.mesh.position.y = t.baseY + Math.sin(now * bobSpeed + t.spawnTime * 0.001) * bobAmount;
+        // Targets remain stationary at their predefined positions (no bobbing)
 
         // Subtle pulse on emissive
         var pulse = 0.5 + Math.sin(now * 0.005) * 0.1;
