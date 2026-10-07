@@ -415,64 +415,24 @@ VantageEngine.Renderers.StrafeTrackingRenderer = class StrafeTrackingRenderer ex
     }
   }
 
-  /* ---------- Override: fire handling ---------- */
+  /* ---------- Override: fire handling (disabled — tracking is passive) ---------- */
 
   _tryFire() {
-    if (!this.running || this._paused || this._stopped) return;
-    var now = Date.now();
-    var weapon = this._weapon;
-    var minInterval = weapon ? VantageEngine.Weapons.getIntervalMs(weapon) : 100;
-    if (now - this._lastFireTime < minInterval - 5) return;
-    this._lastFireTime = now;
-
-    // Fire weapon visual/audio effects (reuses parent's weapon system)
-    this._fireWeapon();
-    if (VantageEngine.Audio && weapon) {
-      VantageEngine.Audio.playWeaponFire(weapon);
-    } else {
-      VantageEngine.Audio.playShoot();
-    }
-
-    // Raycast from crosshair
-    this._camera.updateMatrixWorld();
-    this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
-    this._applyShotSpread();
-
-    // Check hit against the tracking target
-    var hitPoint = null;
-    var isHit = false;
-
-    if (this._trackingTarget && this._trackingTarget.alive) {
-      var meshes = [this._trackingTarget.mesh];
-      var intersects = this._raycaster.intersectObjects(meshes, false);
-
-      if (intersects.length > 0) {
-        hitPoint = intersects[0].point;
-        // Verify the hit is on the main sphere (not a child ring/core)
-        var hitObj = intersects[0].object;
-        if (hitObj === this._trackingTarget.mesh || hitObj.parent === this._trackingTarget.mesh) {
-          isHit = true;
-        }
-      }
-    }
-
-    // Spawn tracer and apply recoil (after raycast, before result)
-    this._spawnTracer(hitPoint);
-    this._applyRecoilKick();
-
-    if (isHit) {
-      this._hitCount++;
-      // Subtle hit particle effect at the hit point
-      if (hitPoint) this._createHitParticles(hitPoint.clone());
-      // Notify engine of the hit (reaction time = 0 for tracking, since target is continuous)
-      if (this._onHit) this._onHit(0);
-    } else {
-      // Miss
-      if (this._onMiss) this._onMiss();
-    }
+    // No shooting in Strafe Tracking. Clicks are ignored; the weapon is visible
+    // but purely cosmetic. Score is earned entirely by keeping the crosshair on target.
   }
 
   /* ---------- Tracking stats export ---------- */
+
+  // Flag so the gameplay page can detect this is a tracking-only mode
+  get isTrackingMode() { return true; }
+
+  // Returns the current tracking accuracy % (updated live each frame)
+  getLiveTrackingAccuracy() {
+    var ts = this._trackingStats;
+    if (ts.totalSamples === 0) return 0;
+    return Math.round((ts.onTargetSamples / ts.totalSamples) * 100);
+  }
 
   getTrackingStats() {
     var ts = this._trackingStats;

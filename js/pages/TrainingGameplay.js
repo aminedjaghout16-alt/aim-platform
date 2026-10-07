@@ -73,10 +73,23 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       if (state === 'paused') pausedAtRef.current = Date.now();
       setEngineState(state);
     });
-    engine.onTick((data) => setTickData({
-      ...data,
-      progression: engine.renderer && engine.renderer.getProgression ? engine.renderer.getProgression() : 0,
-    }));
+    engine.onTick((data) => {
+      var trackingLive = null;
+      if (engine.renderer && engine.renderer.getLiveTrackingAccuracy) {
+        trackingLive = {
+          accuracy: engine.renderer.getLiveTrackingAccuracy(),
+          bestStreak: engine.renderer._trackingStats
+            ? Math.round(engine.renderer._trackingStats.bestStreakFrames / 60 * 10) / 10
+            : null,
+        };
+      }
+      setTickData({
+        ...data,
+        progression: engine.renderer && engine.renderer.getProgression ? engine.renderer.getProgression() : 0,
+        trackingAccuracy: trackingLive ? trackingLive.accuracy : null,
+        bestTrackingStreak: trackingLive ? trackingLive.bestStreak : null,
+      });
+    });
     engine.onCountdown((n) => {
       setCountdownNum(n);
       if (n > 0) Audio.playTick(); else Audio.playGo();
@@ -84,14 +97,11 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     });
     engine.onFinish((res) => {
       Audio.playFinish();
-      // For tracking mode: merge renderer tracking stats and recalculate score
+      // For tracking mode: merge renderer tracking stats and recalculate score (no shooting)
       if (engine.renderer && engine.renderer.getTrackingStats) {
         var ts = engine.renderer.getTrackingStats();
-        var shots = res.stats.hits + res.stats.misses;
         var trackingInput = {
           trackingAccuracy: ts.trackingAccuracy,
-          hits: res.stats.hits,
-          misses: res.stats.misses,
           bestTrackingStreak: ts.bestTrackingStreak,
           avgTrackingError: ts.avgTrackingError,
           duration: res.stats.duration || 1,
@@ -101,7 +111,12 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.stats.timeOnTarget = ts.timeOnTarget;
         res.stats.avgTrackingError = ts.avgTrackingError;
         res.stats.bestTrackingStreak = ts.bestTrackingStreak;
-        res.stats.shotsFired = shots;
+        // No shooting in tracking mode — zero out hit/miss counts
+        res.stats.hits = 0;
+        res.stats.misses = 0;
+        res.stats.totalTargets = 0;
+        res.stats.accuracy = ts.trackingAccuracy;
+        res.stats.avgReactionTime = 0;
         res.score = trackScore.total;
         res.grade = trackScore.grade.letter;
         res.isTrackingMode = true;
@@ -335,17 +350,29 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const handleViewHistory = () => { if (onFinish) onFinish(result); };
 
   // ---- Derived values ----
+  const isTrackingMode = scenario && scenario.id === 'strafe-tracking-3d';
   const sd = tickData?.sessionData;
-  const hits = sd?.hits || 0;
-  const misses = sd?.misses || 0;
+  const hits = isTrackingMode ? 0 : (sd?.hits || 0);
+  const misses = isTrackingMode ? 0 : (sd?.misses || 0);
   const totalShots = hits + misses;
-  const accuracy = totalShots > 0 ? Math.round((hits / totalShots) * 100) : null;
-  const hitMarkerActive = hitMarker && (Date.now() - hitMarker < 300);
-  const avgReaction = hits > 0 && sd ? Math.round(sd.avgReactionTime) : null;
+  const accuracy = isTrackingMode
+    ? (tickData?.trackingAccuracy != null ? tickData.trackingAccuracy : null)
+    : (totalShots > 0 ? Math.round((hits / totalShots) * 100) : null);
+  const hitMarkerActive = !isTrackingMode && hitMarker && (Date.now() - hitMarker < 300);
+  const avgReaction = isTrackingMode ? null : (hits > 0 && sd ? Math.round(sd.avgReactionTime) : null);
   // Live score uses the exact same formula as the results screen
-  const liveScore = sd && totalShots > 0
-    ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
-    : 0;
+  const liveScore = isTrackingMode
+    ? (tickData?.trackingAccuracy != null
+        ? VantageEngine.Scoring.calculateTrackingScore({
+            trackingAccuracy: tickData.trackingAccuracy,
+            bestTrackingStreak: 0,
+            avgTrackingError: 0,
+            duration: sd?.duration || 1,
+          }).total
+        : 0)
+    : (sd && totalShots > 0
+        ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
+        : 0);
   const progression = tickData?.progression || 0;
 
   const remainingSec = tickData && tickData.remaining !== null && tickData.remaining !== undefined
@@ -395,8 +422,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     } catch (err) { /* keep default */ }
 
     if (isTracking) {
-      // Tracking-specific results screen
-      var tShots = result.stats.hits + result.stats.misses;
+      // Tracking-specific results screen (no shooting stats)
       var tSummary = [
         diff && diff.label,
         dur && dur.label,
@@ -429,9 +455,6 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
               [result.stats.trackingAccuracy + '%', 'Tracking Accuracy'],
               [result.stats.timeOnTarget + '%', 'Time On Target'],
               [result.stats.avgTrackingError + '°', 'Avg Tracking Error'],
-              [result.stats.hits, 'Hits'],
-              [result.stats.misses, 'Misses'],
-              [tShots, 'Shots Fired'],
               [result.stats.bestTrackingStreak + 's', 'Best Tracking Streak'],
               [result.stats.duration + 's', 'Duration'],
               [diff && diff.label || '—', 'Difficulty'],
@@ -558,6 +581,8 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         avgReaction,
         difficultyLabel: diffSetting ? diffSetting.label : 'Custom',
         progression,
+        isTrackingMode: isTrackingMode,
+        bestTrackingStreak: tickData?.bestTrackingStreak != null ? tickData.bestTrackingStreak : null,
       }),
       engineState === 'running' && e(TM.PauseHint),
 

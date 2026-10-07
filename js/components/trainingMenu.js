@@ -83,11 +83,12 @@ window.VantageComponents = window.VantageComponents || {};
   //        hits, shots, avgReaction (ms|null), difficultyLabel, progression (0..1)
   TM.TrainingHud = function TrainingHud(p) {
     const pct = Math.round((p.progression || 0) * 100);
+    const tracking = p.isTrackingMode;
     return e('div', { className: 'vtm-hud' },
       e('div', { className: 'vtm-hud-row' },
         e('div', { className: 'vtm-hud-side vtm-hud-left' },
           e(HudStat, { label: 'Score', value: p.score, big: true }),
-          e(HudStat, { label: 'Accuracy', value: p.accuracy === null ? '—' : `${p.accuracy}%` }),
+          e(HudStat, { label: tracking ? 'Tracking' : 'Accuracy', value: p.accuracy === null ? '—' : `${p.accuracy}%` }),
         ),
         e('div', { className: 'vtm-hud-center' },
           e('div', { className: 'vtm-timer-label' }, p.timerLabel),
@@ -104,8 +105,10 @@ window.VantageComponents = window.VantageComponents || {};
           ),
         ),
         e('div', { className: 'vtm-hud-side vtm-hud-right' },
-          e(HudStat, { label: 'Hits', value: p.hits, sub: `of ${p.shots} shot${p.shots === 1 ? '' : 's'}`, big: true }),
-          e(HudStat, { label: 'Avg reaction', value: p.avgReaction === null ? '—' : `${p.avgReaction}ms` }),
+          tracking
+            ? e(HudStat, { label: 'Best Streak', value: p.bestTrackingStreak != null ? `${p.bestTrackingStreak}s` : '—' })
+            : e(HudStat, { label: 'Hits', value: p.hits, sub: `of ${p.shots} shot${p.shots === 1 ? '' : 's'}`, big: true }),
+          !tracking && e(HudStat, { label: 'Avg reaction', value: p.avgReaction === null ? '—' : `${p.avgReaction}ms` }),
         ),
       ),
     );

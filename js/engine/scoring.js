@@ -77,38 +77,27 @@ VantageEngine.Scoring = {
   },
 
   // Calculate score for a tracking session (strafe-tracking-3d)
-  // Rewards: time on target, shot accuracy, consistency, low tracking error
+  // Pure tracking — no shooting. Rewards: time on target, consistency, low tracking error.
   calculateTrackingScore(trackingStats) {
     var trackingAccuracy = trackingStats.trackingAccuracy || 0; // 0-100 %
-    var hits = trackingStats.hits || 0;
-    var misses = trackingStats.misses || 0;
-    var shotsFired = hits + misses;
     var bestTrackingStreak = trackingStats.bestTrackingStreak || 0; // seconds
     var avgTrackingError = trackingStats.avgTrackingError || 0; // degrees
     var duration = trackingStats.duration || 1;
 
-    // Time-on-target score (0-400): directly from tracking accuracy %
-    var onTargetScore = (trackingAccuracy / 100) * 400;
+    // Time-on-target score (0-500): directly from tracking accuracy %
+    var onTargetScore = (trackingAccuracy / 100) * 500;
 
-    // Shot accuracy score (0-200): hits / shots fired
-    var shotAccuracy = shotsFired > 0 ? hits / shotsFired : 0;
-    var shotScore = shotAccuracy * 200;
-
-    // Consistency score (0-200): best tracking streak relative to duration
+    // Consistency score (0-250): best tracking streak relative to duration
     // A perfect session would have a streak equal to the full duration
     var streakFraction = duration > 0 ? Math.min(1, bestTrackingStreak / duration) : 0;
-    var consistencyScore = streakFraction * 200;
+    var consistencyScore = streakFraction * 250;
 
-    // Tracking error score (0-200): lower angular error = higher score
-    // 0° error = 200 points, 20°+ error = 0 points
-    var maxErrorDeg = 20;
-    var errorScore = Math.max(0, Math.min(200, (1 - avgTrackingError / maxErrorDeg) * 200));
+    // Tracking error score (0-250): lower angular error = higher score
+    // 0° error = 250 points, 25°+ error = 0 points
+    var maxErrorDeg = 25;
+    var errorScore = Math.max(0, Math.min(250, (1 - avgTrackingError / maxErrorDeg) * 250));
 
-    // Volume factor: ensure enough shots were fired for a meaningful score
-    var expectedShots = Math.max(10, duration * 1.5);
-    var volume = Math.min(1, shotsFired / expectedShots);
-
-    var total = Math.round((onTargetScore + shotScore + consistencyScore + errorScore) * volume);
+    var total = Math.round(onTargetScore + consistencyScore + errorScore);
     total = Math.max(0, Math.min(1000, total));
 
     return {
