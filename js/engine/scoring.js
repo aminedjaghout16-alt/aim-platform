@@ -107,6 +107,60 @@ VantageEngine.Scoring = {
     };
   },
 
+  // Calculate score for a target switching session
+  // Rewards speed, accuracy, consistency, and streaks.
+  calculateTargetSwitchingScore(switchingStats) {
+    var hits = switchingStats.hits || 0;
+    var misses = switchingStats.misses || 0;
+    var totalShots = hits + misses;
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var avgSwitchTime = switchingStats.avgSwitchTime || 0; // ms
+    var bestSwitchTime = switchingStats.bestSwitchTime || 0; // ms
+    var targetsDestroyed = switchingStats.targetsDestroyed || 0;
+    var bestStreak = switchingStats.bestStreak || 0;
+    var duration = switchingStats.duration || 1;
+
+    // Accuracy score (0-400): high accuracy is essential
+    var accuracyScore = accuracy * 400;
+
+    // Speed score (0-300): faster average switch times earn more
+    // Ideal: <300ms avg = full points, >1000ms = near zero
+    var speedScore = 0;
+    if (avgSwitchTime > 0 && avgSwitchTime < 1500) {
+      speedScore = Math.max(0, 300 - (avgSwitchTime - 200) * 0.25);
+    } else if (avgSwitchTime >= 1500) {
+      speedScore = 0;
+    }
+
+    // Consistency score (0-200): based on best streak relative to total hits
+    var streakScore = 0;
+    if (hits > 0 && bestStreak > 0) {
+      var streakRatio = bestStreak / hits;
+      streakScore = streakRatio * 200;
+    }
+
+    // Best switch time bonus (0-100): rewards peak performance
+    var bestBonus = 0;
+    if (bestSwitchTime > 0 && bestSwitchTime < 1000) {
+      bestBonus = Math.max(0, 100 - (bestSwitchTime - 100) * 0.12);
+    }
+
+    // Volume factor: ensure enough shots were taken
+    var expectedHits = Math.max(5, duration * 0.5);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((accuracyScore + speedScore + streakScore + bestBonus) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      speedScore: Math.round(speedScore * volume),
+      consistencyScore: Math.round(streakScore * volume),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;
