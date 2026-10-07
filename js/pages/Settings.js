@@ -52,6 +52,24 @@ VantagePages.Settings = function Settings({ onNavigate, user, onLogout }) {
 
   var games = VantageEngine.Settings.getAllGames();
 
+  // Target color (stored in the browser via PlayerPrefs, used by the 3D arena)
+  var targetColors = [
+    { id: '#ff2d95', label: 'Hot pink' },
+    { id: '#39ff14', label: 'Neon green' },
+    { id: '#1e6bff', label: 'Electric blue' },
+    { id: '#ff7a00', label: 'Orange' },
+    { id: '#ff2020', label: 'Red' },
+    { id: '#00e0d0', label: 'Teal' },
+    { id: '#ffe600', label: 'Yellow' },
+    { id: '#a64dff', label: 'Purple' },
+  ];
+  var _tc = useState(VantageEngine.PlayerPrefs.get().targetColor);
+  var targetColor = _tc[0];
+  var setTargetColor = function (c) {
+    VantageEngine.PlayerPrefs.set({ targetColor: c });
+    _tc[1](c);
+  };
+
   return e('div', { className: 'vpage-settings' },
     e(VantageUI.PageHeader, {
       title: 'Settings',
@@ -89,6 +107,25 @@ VantagePages.Settings = function Settings({ onNavigate, user, onLogout }) {
       // Display settings
       e(VantageUI.Card, { className: 'vsettings-section animate-in stagger-1' },
         e('h4', { className: 'vsettings-section-title' }, 'DISPLAY'),
+        e('div', { className: 'vtm-swatch-row' },
+          e('span', { className: 'vtm-label' }, 'Target Color'),
+          e('div', { className: 'vtm-swatches' },
+            targetColors.map(function (c) {
+              return e('button', {
+                key: c.id, type: 'button', title: c.label, 'aria-label': c.label,
+                className: 'vtm-swatch ' + (targetColor.toLowerCase() === c.id ? 'vtm-swatch-on' : ''),
+                style: { background: c.id },
+                onClick: function () { setTargetColor(c.id); },
+              });
+            }),
+            e('label', { className: 'vtm-swatch vtm-swatch-custom', title: 'Custom color' },
+              e('input', {
+                type: 'color', value: targetColor, 'aria-label': 'Custom target color',
+                onChange: function (ev) { setTargetColor(ev.target.value); },
+              }),
+            ),
+          ),
+        ),
         e('div', { className: 'vsettings-toggle' },
           e('span', null, 'Sound Effects'),
           e('button', {

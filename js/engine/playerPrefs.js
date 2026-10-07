@@ -14,6 +14,7 @@ VantageEngine.PlayerPrefs = (function () {
     masterVolume: 80,
     musicVolume: 30,
     sfxVolume: 70,
+    targetColor: '#ff2d95',
     crosshair: {
       color: '#00e0d0',
       length: 7,
@@ -50,6 +51,7 @@ VantageEngine.PlayerPrefs = (function () {
       masterVolume: clamp(src.masterVolume, RANGES.masterVolume, d.masterVolume),
       musicVolume: clamp(src.musicVolume, RANGES.musicVolume, d.musicVolume),
       sfxVolume: clamp(src.sfxVolume, RANGES.sfxVolume, d.sfxVolume),
+      targetColor: /^#[0-9a-f]{6}$/i.test(src.targetColor) ? src.targetColor : d.targetColor,
       crosshair: {
         color: /^#[0-9a-f]{6}$/i.test(ch.color) ? ch.color : dc.color,
         length: clamp(ch.length, RANGES.length, dc.length),

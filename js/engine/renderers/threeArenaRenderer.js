@@ -75,6 +75,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     this._onResize = this._handleResize.bind(this);
     this._onContextMenu = (ev) => ev.preventDefault();
 
+    this._targetColor = '#ff2d95';  // target color (changeable via setTargetColor)
+
     // Weapon system
     this._weaponGroup = null;     // Root group attached to camera
     this._muzzleFlash = null;     // Muzzle flash mesh
@@ -219,6 +221,19 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     if (this._camera) {
       this._camera.fov = n;
       this._camera.updateProjectionMatrix();
+    }
+  }
+
+  // Target color as a '#rrggbb' string; recolors targets already on screen
+  setTargetColor(hex) {
+    if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return;
+    this._targetColor = hex;
+    for (const t of this._targets || []) {
+      if (!t || !t.mesh) continue;
+      t.mesh.material.color.set(hex);
+      t.mesh.material.emissive.set(hex);
+      if (t.ring) t.ring.material.color.set(hex);
+      if (t.innerRing) t.innerRing.material.color.set(hex);
     }
   }
 
@@ -1160,8 +1175,8 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Target sphere with improved materials
     const targetGeo = new THREE.SphereGeometry(radius, 24, 24);
     const targetMat = new THREE.MeshStandardMaterial({
-      color: 0xff3d00,
-      emissive: 0xff3d00,
+      color: this._targetColor,
+      emissive: this._targetColor,
       emissiveIntensity: 0.6,
       roughness: 0.25,
       metalness: 0.6,
@@ -1184,7 +1199,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Outer ring (billboard) - improved
     const ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xff3d00,
+      color: this._targetColor,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -1195,7 +1210,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     // Secondary inner ring for depth
     const innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
     const innerRingMat = new THREE.MeshBasicMaterial({
-      color: 0xff3d00,
+      color: this._targetColor,
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
@@ -1254,7 +1269,7 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
     const particleCount = 12;
     const particleGeo = new THREE.SphereGeometry(0.04, 6, 6);
     const particleMat = new THREE.MeshBasicMaterial({
-      color: 0xff3d00,
+      color: this._targetColor,
       transparent: true,
       opacity: 1,
     });
@@ -1544,14 +1559,14 @@ VantageEngine.Renderers.ThreeArenaRenderer = class ThreeArenaRenderer {
             t.mesh.scale.setScalar(1.4 - transition * 0.3);
             t.mesh.material.emissiveIntensity = 3 - transition * 2;
             const colorLerp = transition;
-            t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(0xff3d00), colorLerp);
+            t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(this._targetColor), colorLerp);
           } else {
             // Shrink and fade
             const shrink = t.hitAnim / 0.5;
             t.mesh.scale.setScalar(shrink * 1.1);
             t.mesh.material.opacity = shrink * 0.6;
             t.mesh.material.emissiveIntensity = shrink;
-            t.mesh.material.color.setHex(0xff3d00);
+            t.mesh.material.color.set(this._targetColor);
           }
           t.core.material.opacity = t.hitAnim * 0.5;
           t.ring.material.opacity = t.hitAnim * 0.5;

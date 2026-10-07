@@ -16,6 +16,17 @@ window.VantageComponents = window.VantageComponents || {};
     { id: '#ff3d5a', label: 'Red' },
   ];
 
+  const TARGET_COLORS = [
+    { id: '#ff2d95', label: 'Hot pink' },
+    { id: '#39ff14', label: 'Neon green' },
+    { id: '#1e6bff', label: 'Electric blue' },
+    { id: '#ff7a00', label: 'Orange' },
+    { id: '#ff2020', label: 'Red' },
+    { id: '#00e0d0', label: 'Teal' },
+    { id: '#ffe600', label: 'Yellow' },
+    { id: '#a64dff', label: 'Purple' },
+  ];
+
   /* ---------- Formatting helpers ---------- */
 
   function fmtClock(totalSeconds) {
@@ -326,6 +337,24 @@ window.VantageComponents = window.VantageComponents || {};
       );
     } else {
       body = e('div', { className: 'vtm-tabbody' },
+        e('div', { className: 'vtm-swatch-row' },
+          e('span', { className: 'vtm-label' }, 'Target color'),
+          e('div', { className: 'vtm-swatches' },
+            TARGET_COLORS.map((c) => e('button', {
+              key: c.id, type: 'button', title: c.label, 'aria-label': c.label,
+              className: `vtm-swatch ${prefs.targetColor.toLowerCase() === c.id ? 'vtm-swatch-on' : ''}`,
+              style: { background: c.id },
+              onClick: () => p.onPrefs({ targetColor: c.id }),
+            })),
+            e('label', { className: 'vtm-swatch vtm-swatch-custom', title: 'Custom color' },
+              e('input', {
+                type: 'color', value: prefs.targetColor, 'aria-label': 'Custom target color',
+                onChange: (ev) => p.onPrefs({ targetColor: ev.target.value }),
+              }),
+            ),
+          ),
+        ),
+        e('div', { className: 'vtm-note vtm-note-block' }, 'Target color applies instantly, even to targets already on screen.'),
         e(Segmented, {
           label: 'Target size', value: p.pending.targetSize, activeValue: p.live.targetSize,
           options: S.getAllTargetSizes(), onChange: (v) => p.onPending({ targetSize: v }),

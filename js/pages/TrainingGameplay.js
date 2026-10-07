@@ -105,6 +105,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       if (!engine.load(scenarioId, cfgRef.current || {})) throw new Error('Scenario could not be loaded.');
       if (!engine.attachRenderer(canvasRef.current)) throw new Error('Renderer could not be created.');
       if (engine.renderer.setFov) engine.renderer.setFov(prefsRef.current.fov);
+      if (engine.renderer.setTargetColor) engine.renderer.setTargetColor(prefsRef.current.targetColor);
       if (engine.renderer.setCallbacks) {
         engine.renderer.setCallbacks({
           onHit: (rt) => { engine.registerHit(rt); setHitMarker(Date.now()); Audio.playHit(); },
@@ -239,6 +240,10 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     if (patch.fov !== undefined) {
       const eng = engineRef.current;
       if (eng && eng.renderer && eng.renderer.setFov) eng.renderer.setFov(next.fov);
+    }
+    if (patch.targetColor !== undefined) {
+      const eng = engineRef.current;
+      if (eng && eng.renderer && eng.renderer.setTargetColor) eng.renderer.setTargetColor(next.targetColor);
     }
     if (patch.masterVolume !== undefined || patch.musicVolume !== undefined || patch.sfxVolume !== undefined) {
       Audio.setVolumes({ master: next.masterVolume, music: next.musicVolume, sfx: next.sfxVolume });
