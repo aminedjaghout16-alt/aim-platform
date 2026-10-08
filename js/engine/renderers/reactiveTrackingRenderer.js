@@ -2,8 +2,8 @@
    Reactive Tracking Renderer — 3D
    Extends ThreeArenaRenderer to reuse the arena,
    weapon system, mouse look, and effects.
-   Target spawns stationary, then moves unpredictably.
-   Player must track and shoot the moving target.
+   Target appears suddenly after random delay.
+   Player must react quickly and shoot.
    ============================================ */
 VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRenderer extends VantageEngine.Renderers.ThreeArenaRenderer {
 
@@ -14,36 +14,24 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
     this._spawnGrid = this._buildSpawnGrid();
     this._currentSpawnIndex = -1;
 
-    // Movement state
+    // Target state
     this._target = null;
-    this._movementActive = false;
-    this._movementStartTime = 0;
-    this._stationaryDuration = 800; // ms before movement starts
+    this._targetSpawnTime = 0;
 
-    // Velocity-based movement
-    this._velocity = { x: 0, y: 0 };
-    this._maxSpeed = 3.5; // units per second
-    this._acceleration = 8.0; // how fast velocity changes
-    this._directionChangeInterval = 0;
-    this._nextDirectionChange = 0;
-
-    // Movement bounds (relative to spawn position)
-    this._moveBounds = {
-      minX: -2.5,
-      maxX: 2.5,
-      minY: -1.0,
-      maxY: 1.0,
-    };
+    // Spawn delay logic
+    this._spawnDelayTimer = null;
+    this._minSpawnDelay = 800;  // ms
+    this._maxSpawnDelay = 2000; // ms
 
     // Stats tracking
-    this._trackingTimes = []; // time from movement start to hit
+    this._reactionTimes = []; // time from spawn to hit
     this._targetsDestroyed = 0;
 
     // Override target radius
     var S = VantageEngine.Settings;
     var sizeSetting = S.getTargetSize(config.targetSize || 'medium');
     var baseRadius = sizeSetting ? sizeSetting.px / 100 : 0.36;
-    this.targetBaseRadius = baseRadius * 1.1; // slightly larger for tracking
+    this.targetBaseRadius = baseRadius;
   }
 
   /* ---------- Spawn Grid ---------- */
@@ -84,28 +72,66 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
     this.running = true;
     this._hitCount = 0;
     this._sessionStartTime = Date.now();
-    this._trackingTimes = [];
+    this._reactionTimes = [];
     this._targetsDestroyed = 0;
     this._currentSpawnIndex = -1;
     this._spawnPending = false;
+    this._target = null;
+    this._targetSpawnTime = 0;
 
-    this._spawnTarget();
+    // Start the spawn delay cycle
+    this._scheduleNextSpawn();
     this._loop();
   }
 
   pause() {
+    // Clear spawn timer when pausing
+    if (this._spawnDelayTimer) {
+      clearTimeout(this._spawnDelayTimer);
+      this._spawnDelayTimer = null;
+    }
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.pause.call(this);
   }
 
   resume() {
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.resume.call(this);
+    // If no target is active, schedule next spawn
+    if (!this._target && this.running) {
+      this._scheduleNextSpawn();
+    }
   }
 
   stop() {
+    // Clear spawn timer
+    if (this._spawnDelayTimer) {
+      clearTimeout(this._spawnDelayTimer);
+      this._spawnDelayTimer = null;
+    }
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
-    this._trackingTimes = [];
+    this._reactionTimes = [];
     this._targetsDestroyed = 0;
-    this._movementActive = false;
+    this._target = null;
+  }
+
+  /* ---------- Spawn Delay Logic ---------- */
+
+  _scheduleNextSpawn() {
+    if (!this.running) return;
+
+    // Clear any existing timer
+    if (this._spawnDelayTimer) {
+      clearTimeout(this._spawnDelayTimer);
+    }
+
+    // Random delay between min and max
+    var delay = this._minSpawnDelay + Math.random() * (this._maxSpawnDelay - this._minSpawnDelay);
+
+    var self = this;
+    this._spawnDelayTimer = setTimeout(function () {
+      if (self.running && !self._target) {
+        self._spawnTarget();
+      }
+    }, delay);
   }
 
   /* ---------- Target Spawning ---------- */
@@ -113,19 +139,15 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
   _spawnTarget() {
     if (!this.running) return;
 
-    // Clear existing target
+    // Clear existing target if any
     if (this._target) {
       this._clearTarget();
     }
 
     var pos = this._getNextSpawnPosition();
 
-    // Reset movement state
-    this._movementActive = false;
-    this._movementStartTime = 0;
-    this._velocity = { x: 0, y: 0 };
-    this._directionChangeInterval = 0;
-    this._nextDirectionChange = 0;
+    // Record spawn time for reaction tracking
+    this._targetSpawnTime = Date.now();
 
     var radius = this.targetBaseRadius;
 
@@ -173,7 +195,7 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
       ring: ring,
       innerRing: innerRing,
       radius: radius,
-      spawnTime: Date.now(),
+      spawnTime: this._targetSpawnTime,
       spawnPos: { x: pos.x, y: pos.y, z: pos.z },
       alive: true,
       opacity: 0,
@@ -200,80 +222,39 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
       }
     });
     this._target = null;
-  }
-
-  /* ---------- Movement ---------- */
-
-  _updateMovement(dt) {
-    if (!this._target || !this._target.alive) return;
-
-    var now = Date.now();
-    var elapsed = now - this._target.spawnTime;
-
-    // Start movement after stationary duration
-    if (!this._movementActive && elapsed >= this._stationaryDuration) {
-      this._movementActive = true;
-      this._movementStartTime = now;
-      this._nextDirectionChange = now + 300 + Math.random() * 700; // 300-1000ms
-      this._changeDirection();
-    }
-
-    if (!this._movementActive) return;
-
-    // Change direction periodically
-    if (now >= this._nextDirectionChange) {
-      this._changeDirection();
-      this._nextDirectionChange = now + 400 + Math.random() * 800; // 400-1200ms
-    }
-
-    // Apply velocity with acceleration
-    var targetMesh = this._target.mesh;
-    var currentPos = targetMesh.position;
-
-    // Calculate new position
-    var newX = currentPos.x + this._velocity.x * dt;
-    var newY = currentPos.y + this._velocity.y * dt;
-
-    // Bounds checking (relative to spawn position)
-    var spawnPos = this._target.spawnPos;
-    var relX = newX - spawnPos.x;
-    var relY = newY - spawnPos.y;
-
-    // Clamp to bounds
-    if (relX < this._moveBounds.minX) {
-      relX = this._moveBounds.minX;
-      this._velocity.x = Math.abs(this._velocity.x) * 0.5; // bounce
-    } else if (relX > this._moveBounds.maxX) {
-      relX = this._moveBounds.maxX;
-      this._velocity.x = -Math.abs(this._velocity.x) * 0.5;
-    }
-
-    if (relY < this._moveBounds.minY) {
-      relY = this._moveBounds.minY;
-      this._velocity.y = Math.abs(this._velocity.y) * 0.5;
-    } else if (relY > this._moveBounds.maxY) {
-      relY = this._moveBounds.maxY;
-      this._velocity.y = -Math.abs(this._velocity.y) * 0.5;
-    }
-
-    targetMesh.position.x = spawnPos.x + relX;
-    targetMesh.position.y = spawnPos.y + relY;
-  }
-
-  _changeDirection() {
-    // Random direction change
-    var angle = Math.random() * Math.PI * 2;
-    var speed = 1.5 + Math.random() * (this._maxSpeed - 1.5);
-
-    this._velocity.x = Math.cos(angle) * speed;
-    this._velocity.y = Math.sin(angle) * speed * 0.5; // less vertical movement
+    this._targetSpawnTime = 0;
   }
 
   /* ---------- Override: fire handling ---------- */
 
   _tryFire() {
     if (!this.running || this._paused || this._stopped) return;
-    if (!this._target || !this._target.alive) return;
+    if (!this._target || !this._target.alive) {
+      // No target to shoot at, but still count as miss
+      var now = Date.now();
+      var weapon = this._weapon;
+      var minInterval = weapon ? VantageEngine.Weapons.getIntervalMs(weapon) : 100;
+      if (now - this._lastFireTime < minInterval - 5) return;
+      this._lastFireTime = now;
+
+      // Fire weapon effects
+      this._fireWeapon();
+      if (VantageEngine.Audio && weapon) {
+        VantageEngine.Audio.playWeaponFire(weapon);
+      } else {
+        VantageEngine.Audio.playShoot();
+      }
+
+      // Raycast (will miss since no target)
+      this._camera.updateMatrixWorld();
+      this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
+      this._applyShotSpread();
+      this._spawnTracer(null);
+      this._applyRecoilKick();
+
+      if (this._onMiss) this._onMiss();
+      return;
+    }
 
     var now = Date.now();
     var weapon = this._weapon;
@@ -317,24 +298,21 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
         // Create particle burst
         this._createHitParticles(this._target.mesh.position.clone());
 
-        // Calculate tracking time if movement was active
-        if (this._movementActive && this._movementStartTime > 0) {
-          var trackingTime = now - this._movementStartTime;
-          this._trackingTimes.push(trackingTime);
-        }
+        // Calculate reaction time (time from spawn to hit)
+        var reactionTime = now - this._targetSpawnTime;
+        this._reactionTimes.push(reactionTime);
 
         // Report hit
-        var reactionTime = this._movementActive ? (now - this._movementStartTime) : 0;
         if (this._onHit) this._onHit(reactionTime);
         hit = true;
 
-        // Spawn replacement after delay
+        // Clear target and schedule next spawn
         var self = this;
         setTimeout(function () {
           if (self._stopped) return;
           self._clearTarget();
           if (self.running) {
-            self._spawnTarget();
+            self._scheduleNextSpawn();
           }
         }, 150);
       }
@@ -353,10 +331,7 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
     this._updateParticles(dt);
     this._updateWeapon(dt);
 
-    // Update movement
-    this._updateMovement(dt);
-
-    // Update target visuals
+    // Update target visuals (stationary, no movement)
     if (this._target && this._target.alive) {
       var t = this._target;
 
@@ -410,29 +385,24 @@ VantageEngine.Renderers.ReactiveTrackingRenderer = class ReactiveTrackingRendere
         if (t.innerRing) t.innerRing.material.opacity = t.hitAnim * 0.35;
       }
     }
-
-    // Safety net
-    if (this.running && !this._target) {
-      this._spawnTarget();
-    }
   }
 
   /* ---------- Stats Export ---------- */
 
   getReactiveTrackingStats() {
-    var avgTrackingTime = 0;
-    if (this._trackingTimes.length > 0) {
+    var avgReactionTime = 0;
+    if (this._reactionTimes.length > 0) {
       var sum = 0;
-      for (var i = 0; i < this._trackingTimes.length; i++) {
-        sum += this._trackingTimes[i];
+      for (var i = 0; i < this._reactionTimes.length; i++) {
+        sum += this._reactionTimes[i];
       }
-      avgTrackingTime = Math.round(sum / this._trackingTimes.length);
+      avgReactionTime = Math.round(sum / this._reactionTimes.length);
     }
 
     return {
       targetsDestroyed: this._targetsDestroyed,
-      avgTrackingTime: avgTrackingTime,
-      trackingTimeCount: this._trackingTimes.length,
+      avgTrackingTime: avgReactionTime, // Keep same name for compatibility
+      trackingTimeCount: this._reactionTimes.length,
     };
   }
 
