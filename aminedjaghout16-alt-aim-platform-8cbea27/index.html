@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VANTAGE — Precision Aim Training</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>▽</text></svg>">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/components.css?v=6">
+
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Three.js -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Firebase SDK (compat version for script-tag usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Firebase Config -->
+  <script src="js/firebase-config.js?v=1"></script>
+  <script src="js/firebase-init.js?v=1"></script>
+
+  <!-- Services -->
+  <script src="js/services/authService.js?v=1"></script>
+  <script src="js/services/databaseService.js?v=1"></script>
+
+  <!-- Engine -->
+  <script src="js/engine/categories.js?v=3"></script>
+  <script src="js/engine/settings.js?v=3"></script>
+  <script src="js/engine/playerPrefs.js?v=6"></script>
+  <script src="js/engine/audio.js?v=5"></script>
+  <script src="js/engine/weapons.js?v=2"></script>
+  <script src="js/engine/scoring.js?v=4"></script>
+  <script src="js/engine/scenarios.js?v=5"></script>
+  <script src="js/engine/renderers.js?v=3"></script>
+  <script src="js/engine/renderers/gridShotRenderer.js?v=3"></script>
+  <script src="js/engine/renderers/threeArenaRenderer.js?v=10"></script>
+  <script src="js/engine/renderers/strafeTrackingRenderer.js?v=1"></script>
+  <script src="js/engine/renderers/targetSwitchingRenderer.js?v=1"></script>
+  <script src="js/engine/renderers/reactiveTrackingRenderer.js?v=1"></script>
+  <script src="js/engine/renderers/botStrafeRenderer.js?v=1"></script>
+  <script src="js/engine/renderers/adjustshotRenderer.js?v=1"></script>
+  <script src="js/engine/trainingEngine.js?v=3"></script>
+
+  <!-- UI Components -->
+  <script src="js/components/ui.js?v=3"></script>
+  <script src="js/components/Layout.js?v=3"></script>
+  <script src="js/components/trainingMenu.js?v=6"></script>
+  <script src="js/components/PlaylistCreator.js?v=1"></script>
+  <script src="js/components/PlaylistTransition.js?v=1"></script>
+
+  <!-- Pages -->
+  <script src="js/pages/Landing.js?v=3"></script>
+  <script src="js/pages/Dashboard.js?v=1"></script>
+  <script src="js/pages/TrainingLibrary.js?v=4"></script>
+  <script src="js/pages/TrainingDetails.js?v=3"></script>
+  <script src="js/pages/TrainingSetup.js?v=3"></script>
+  <script src="js/pages/WeaponSelect.js?v=2"></script>
+  <script src="js/pages/TrainingGameplay.js?v=8"></script>
+  <script src="js/pages/Results.js?v=1"></script>
+  <script src="js/pages/PlaylistSummary.js?v=1"></script>
+  <script src="js/pages/PlaylistPage.js?v=1"></script>
+  <script src="js/pages/Statistics.js?v=1"></script>
+  <script src="js/pages/Profile.js?v=1"></script>
+  <script src="js/pages/Settings.js?v=2"></script>
+  <script src="js/pages/Login.js?v=1"></script>
+  <script src="js/pages/Register.js?v=1"></script>
+
+  <!-- App -->
+  <script src="js/app.js?v=2"></script>
+</body>
+</html>
