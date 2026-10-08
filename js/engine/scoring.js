@@ -161,6 +161,51 @@ VantageEngine.Scoring = {
     };
   },
 
+  // Calculate score for a reactive tracking session
+  // Rewards accuracy, reaction speed, sustained tracking, and streaks.
+  calculateReactiveTrackingScore(trackingStats) {
+    var hits = trackingStats.hits || 0;
+    var misses = trackingStats.misses || 0;
+    var totalShots = hits + misses;
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var avgTrackingTime = trackingStats.avgTrackingTime || 0; // ms
+    var targetsDestroyed = trackingStats.targetsDestroyed || 0;
+    var bestStreak = trackingStats.bestStreak || 0;
+    var duration = trackingStats.duration || 1;
+
+    // Accuracy score (0-400): high accuracy is essential
+    var accuracyScore = accuracy * 400;
+
+    // Reaction speed score (0-300): faster tracking times earn more
+    // Ideal: <500ms avg = full points, >2000ms = near zero
+    var speedScore = 0;
+    if (avgTrackingTime > 0 && avgTrackingTime < 2500) {
+      speedScore = Math.max(0, 300 - (avgTrackingTime - 300) * 0.14);
+    }
+
+    // Consistency score (0-200): based on best streak relative to total hits
+    var streakScore = 0;
+    if (hits > 0 && bestStreak > 0) {
+      var streakRatio = bestStreak / hits;
+      streakScore = streakRatio * 200;
+    }
+
+    // Volume factor: ensure enough targets were destroyed
+    var expectedHits = Math.max(5, duration * 0.4);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((accuracyScore + speedScore + streakScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      speedScore: Math.round(speedScore * volume),
+      consistencyScore: Math.round(streakScore * volume),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;

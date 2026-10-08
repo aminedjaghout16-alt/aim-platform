@@ -142,6 +142,25 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.grade = switchScore.grade.letter;
         res.isTargetSwitchingMode = true;
       }
+      // For reactive tracking mode: merge renderer tracking stats and recalculate score
+      if (engine.renderer && engine.renderer.getReactiveTrackingStats) {
+        var rts = engine.renderer.getReactiveTrackingStats();
+        var reactiveInput = {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          avgTrackingTime: rts.avgTrackingTime,
+          targetsDestroyed: rts.targetsDestroyed,
+          bestStreak: res.stats.bestStreak || 0,
+          duration: res.stats.duration || 1,
+        };
+        var reactiveScore = VantageEngine.Scoring.calculateReactiveTrackingScore(reactiveInput);
+        res.stats.avgTrackingTime = rts.avgTrackingTime;
+        res.stats.targetsDestroyed = rts.targetsDestroyed;
+        res.stats.shotsFired = (res.stats.hits || 0) + (res.stats.misses || 0);
+        res.score = reactiveScore.total;
+        res.grade = reactiveScore.grade.letter;
+        res.isReactiveTrackingMode = true;
+      }
       setResult(res);
       // Save the real result immediately so it is never lost
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
@@ -373,6 +392,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   // ---- Derived values ----
   const isTrackingMode = scenario && scenario.id === 'strafe-tracking-3d';
   const isTargetSwitchingMode = scenario && scenario.id === 'target-switching-3d';
+  const isReactiveTrackingMode = scenario && scenario.id === 'reactive-tracking-3d';
   const sd = tickData?.sessionData;
   const hits = isTrackingMode ? 0 : (sd?.hits || 0);
   const misses = isTrackingMode ? 0 : (sd?.misses || 0);
@@ -404,9 +424,20 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
                 duration: sd?.duration || 1,
               }).total
             : 0)
-        : (sd && totalShots > 0
-            ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
-            : 0);
+        : isReactiveTrackingMode
+            ? (sd && totalShots > 0
+                ? VantageEngine.Scoring.calculateReactiveTrackingScore({
+                    hits: hits,
+                    misses: misses,
+                    avgTrackingTime: sd.avgReactionTime || 0,
+                    targetsDestroyed: sd.hits || 0,
+                    bestStreak: sd.bestStreak || 0,
+                    duration: sd?.duration || 1,
+                  }).total
+                : 0)
+            : (sd && totalShots > 0
+                ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
+                : 0);
   const progression = tickData?.progression || 0;
 
   const remainingSec = tickData && tickData.remaining !== null && tickData.remaining !== undefined
@@ -509,6 +540,67 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           tsSummary && e('div', { className: 'vresults-config' }, tsSummary),
+          e('div', { className: 'vresults-actions' },
+            e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
+            e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
+            e(VantageUI.Button, { variant: 'primary', onClick: handlePlayAgain }, 'PLAY AGAIN'),
+          ),
+        ),
+      );
+    }
+
+    // Reactive Tracking results screen
+    var isReactiveTracking = result.isReactiveTrackingMode || (scenario && scenario.id === 'reactive-tracking-3d');
+    if (isReactiveTracking) {
+      var rtShots = (result.stats.hits || 0) + (result.stats.misses || 0);
+      var rtAccuracy = rtShots > 0 ? Math.round((result.stats.hits / rtShots) * 100) : 0;
+      var rtAvgTracking = result.stats.avgTrackingTime || 0;
+      var rtSummary = [
+        dur && dur.label,
+        weaponUsed,
+      ].filter(Boolean).join(' · ');
+
+      var rtSaveLine = 'Saving session…';
+      var rtSaveClass = 'vresults-save';
+      if (saveInfo) {
+        if (saveInfo.previousBest === null) rtSaveLine = 'First session saved to your history';
+        else if (saveInfo.isPersonalBest) { rtSaveLine = '★ NEW PERSONAL BEST'; rtSaveClass += ' vresults-save-pb'; }
+        else rtSaveLine = 'Session saved · Personal best ' + saveInfo.previousBest;
+      }
+
+      return e('div', { className: 'vpage-gameplay vpage-results-overlay' },
+        e('div', { className: 'vresults-screen animate-in' },
+          e('div', { className: 'vresults-scenario' }, 'REACTIVE TRACKING — 3D — Complete'),
+          e('div', { className: 'vresults-grade', style: { color: grade.color || 'var(--accent-primary)' } },
+            e('span', { className: 'vresults-grade-letter' }, result.grade),
+            e('span', { className: 'vresults-grade-label' }, grade.label || ''),
+          ),
+          e('div', { className: 'vresults-score' },
+            e('span', { className: 'vresults-score-value' }, result.score),
+            e('span', { className: 'vresults-score-label' }, 'SCORE'),
+          ),
+          e('div', { className: rtSaveClass }, rtSaveLine),
+          e('div', { className: 'vresults-stats' },
+            [
+              [result.score, 'Score'],
+              [rtAccuracy + '%', 'Accuracy'],
+              [rtAvgTracking > 0 ? rtAvgTracking + 'ms' : '—', 'Avg Tracking Time'],
+              [result.stats.hits || 0, 'Hits'],
+              [result.stats.misses || 0, 'Misses'],
+              [rtShots, 'Shots Fired'],
+              [result.stats.targetsDestroyed || 0, 'Targets Destroyed'],
+              [result.stats.bestStreak || 0, 'Best Hit Streak'],
+              [result.stats.duration + 's', 'Session Duration'],
+              [weaponUsed, 'Weapon Used'],
+            ].map(function (pair) {
+              var value = pair[0], label = pair[1];
+              return e('div', { key: label, className: 'vresults-stat' },
+                e('span', { className: 'vresults-stat-value' }, value),
+                e('span', { className: 'vresults-stat-label' }, label),
+              );
+            })
+          ),
+          rtSummary && e('div', { className: 'vresults-config' }, rtSummary),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
