@@ -23,19 +23,8 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
 
     // Stats tracking
     this._targetsKilled = 0;
-    this._headshots = 0;
-    this._bodyKills = 0;
     this._shotsFired = 0;
     this._hitTimes = [];
-
-    // Bot health system (reuse from BotStrafe)
-    this._botHP = 4;
-    this._maxBotHP = 4;
-
-    // Combat indicators
-    this._combatIndicator = null;
-    this._combatIndicatorTimer = null;
-    this._combatIndicatorStyle = null;
 
     // Target size
     var S = VantageEngine.Settings;
@@ -53,11 +42,8 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
     this._hitCount = 0;
     this._sessionStartTime = Date.now();
     this._targetsKilled = 0;
-    this._headshots = 0;
-    this._bodyKills = 0;
     this._shotsFired = 0;
     this._hitTimes = [];
-    this._combatIndicator = null;
 
     // Spawn initial 2 targets
     this._spawnInitialTargets();
@@ -76,16 +62,8 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
     this._targets = [];
     this._targetsKilled = 0;
-    this._headshots = 0;
-    this._bodyKills = 0;
     this._shotsFired = 0;
     this._hitTimes = [];
-    this._combatIndicator = null;
-    this._combatIndicatorStyle = null;
-    if (this._combatIndicatorTimer) {
-      clearTimeout(this._combatIndicatorTimer);
-      this._combatIndicatorTimer = null;
-    }
   }
 
   /* ---------- Target Spawning ---------- */
@@ -113,7 +91,6 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       alive: true,
       opacity: 0,
       hitAnim: 0,
-      hp: this._maxBotHP,
       
       // Movement state
       velocity: { x: 0, y: 0 },
@@ -197,7 +174,7 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
     // Cyan color scheme to match the game's aesthetic
     var targetColor = 0x00d4ff;
     
-    // Main sphere (body hit zone - outer area)
+    // Main sphere (entire circle is one hit zone)
     var sphereGeo = new THREE.SphereGeometry(radius, 24, 24);
     var sphereMat = new THREE.MeshStandardMaterial({
       color: targetColor,
@@ -209,11 +186,10 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       opacity: 0,
     });
     var sphere = new THREE.Mesh(sphereGeo, sphereMat);
-    sphere.userData.hitZone = 'body'; // Outer sphere = body shot
     group.add(sphere);
 
-    // Inner core (headshot hit zone - center, smaller, harder to hit)
-    var coreRadius = radius * 0.35; // 35% of total radius = small, precise target
+    // Inner core (visual only, same hit zone)
+    var coreRadius = radius * 0.35;
     var coreGeo = new THREE.SphereGeometry(coreRadius, 16, 16);
     var coreMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -221,10 +197,9 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       opacity: 0,
     });
     var core = new THREE.Mesh(coreGeo, coreMat);
-    core.userData.hitZone = 'head'; // Inner core = headshot
     group.add(core);
 
-    // Outer ring (decorative, body hit zone)
+    // Outer ring (decorative)
     var ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
     var ringMat = new THREE.MeshBasicMaterial({
       color: targetColor,
@@ -233,10 +208,9 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       side: THREE.DoubleSide,
     });
     var ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.userData.hitZone = 'body'; // Ring = body shot
     group.add(ring);
 
-    // Inner ring (decorative, body hit zone)
+    // Inner ring (decorative)
     var innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
     var innerRingMat = new THREE.MeshBasicMaterial({
       color: targetColor,
@@ -245,7 +219,6 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       side: THREE.DoubleSide,
     });
     var innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
-    innerRing.userData.hitZone = 'body'; // Inner ring = body shot
     group.add(innerRing);
 
     // Store materials for opacity animation
@@ -383,199 +356,57 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       var target = meshToTarget.get(hitObj);
 
       if (target && target.alive) {
-        // Determine hit zone
-        var hitZone = hitObj.userData.hitZone || 'body';
-        var isHeadshot = (hitZone === 'head');
-
-        // Apply damage
-        if (isHeadshot) {
-          target.hp = 0;
-          this._showCombatIndicator('HEADSHOT');
-        } else {
-          target.hp--;
-          if (target.hp <= 0) {
-            this._showCombatIndicator('BODY');
-          } else {
-            this._showCombatIndicator('BODY HIT');
-          }
-        }
+        // Instant kill on any hit
+        target.alive = false;
+        target.hitAnim = 1.0;
+        this._hitCount++;
+        this._targetsKilled++;
 
         // Create particle burst
         this._createHitParticles(target.mesh.position.clone());
 
-        // Check if target died
-        if (target.hp <= 0) {
-          target.alive = false;
-          target.hitAnim = 1.0;
-          this._hitCount++;
-          this._targetsKilled++;
-
-          if (isHeadshot) {
-            this._headshots++;
-          } else {
-            this._bodyKills++;
-          }
-
-          // Play kill sound
-          if (VantageEngine.Audio && VantageEngine.Audio.playKillSound) {
-            VantageEngine.Audio.playKillSound();
-          }
-
-          // Record hit time
-          var survivalTime = now - target.spawnTime;
-          this._hitTimes.push(survivalTime);
-
-          // Report hit
-          if (this._onHit) this._onHit(survivalTime);
-          hit = true;
-
-          // Respawn this target after death animation
-          var self = this;
-          setTimeout(function () {
-            if (self._stopped) return;
-            // Remove dead target
-            var idx = self._targets.indexOf(target);
-            if (idx !== -1) {
-              self._targets.splice(idx, 1);
-            }
-            if (target.mesh.parent) {
-              target.mesh.parent.remove(target.mesh);
-            }
-            target.mesh.traverse(function (child) {
-              if (child.geometry) child.geometry.dispose();
-              if (child.material) {
-                if (Array.isArray(child.material)) child.material.forEach(function (m) { m.dispose(); });
-                else child.material.dispose();
-              }
-            });
-
-            // Spawn new target
-            if (self.running) {
-              self._spawnTarget();
-            }
-          }, 200);
-        } else {
-          // Target survives
-          target.hitAnim = 0.5;
-          hit = true;
-          
-          var survivalTime = now - target.spawnTime;
-          if (this._onHit) this._onHit(survivalTime);
+        // Play kill sound
+        if (VantageEngine.Audio && VantageEngine.Audio.playKillSound) {
+          VantageEngine.Audio.playKillSound();
         }
+
+        // Record hit time
+        var survivalTime = now - target.spawnTime;
+        this._hitTimes.push(survivalTime);
+
+        // Report hit
+        if (this._onHit) this._onHit(survivalTime);
+        hit = true;
+
+        // Respawn this target after death animation
+        var self = this;
+        setTimeout(function () {
+          if (self._stopped) return;
+          // Remove dead target
+          var idx = self._targets.indexOf(target);
+          if (idx !== -1) {
+            self._targets.splice(idx, 1);
+          }
+          if (target.mesh.parent) {
+            target.mesh.parent.remove(target.mesh);
+          }
+          target.mesh.traverse(function (child) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) child.material.forEach(function (m) { m.dispose(); });
+              else child.material.dispose();
+            }
+          });
+
+          // Spawn new target
+          if (self.running) {
+            self._spawnTarget();
+          }
+        }, 200);
       }
     }
 
     if (!hit && this._onMiss) this._onMiss();
-  }
-
-  /* ---------- Combat Indicator ---------- */
-
-  _showCombatIndicator(text) {
-    // Only show emblem for kills
-    if (text === 'BODY HIT') return;
-
-    // Clear any existing indicator
-    if (this._combatIndicatorTimer) {
-      clearTimeout(this._combatIndicatorTimer);
-      this._combatIndicatorTimer = null;
-    }
-
-    // Remove existing indicator element if present
-    if (this._combatIndicator && this._combatIndicator.parentElement) {
-      this._combatIndicator.parentElement.removeChild(this._combatIndicator);
-    }
-
-    // Create container
-    var indicator = document.createElement('div');
-    indicator.className = 'adjustshot-kill-emblem';
-    
-    var displayText = text === 'HEADSHOT' ? 'HEADSHOT' : 'KILL';
-    var accentColor = text === 'HEADSHOT' ? '#ff3366' : '#00d4ff';
-    
-    var svgMarkup = this._createSkullEmblemSVG(accentColor);
-    
-    indicator.innerHTML = 
-      '<div class="kill-emblem-icon">' + svgMarkup + '</div>' +
-      '<div class="kill-emblem-text">' + displayText + '</div>';
-    
-    // Position LOWER on screen
-    indicator.style.position = 'absolute';
-    indicator.style.left = '50%';
-    indicator.style.top = '72%';
-    indicator.style.transform = 'translate(-50%, -50%) scale(0.5)';
-    indicator.style.pointerEvents = 'none';
-    indicator.style.zIndex = '1000';
-    indicator.style.opacity = '0';
-    indicator.style.display = 'flex';
-    indicator.style.flexDirection = 'column';
-    indicator.style.alignItems = 'center';
-    indicator.style.gap = '4px';
-    
-    var iconStyle = document.createElement('style');
-    iconStyle.textContent = 
-      '.adjustshot-kill-emblem .kill-emblem-icon { ' +
-      '  width: 48px; ' +
-      '  height: 48px; ' +
-      '  filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.6)); ' +
-      '} ' +
-      '.adjustshot-kill-emblem .kill-emblem-text { ' +
-      '  font-family: "Arial", sans-serif; ' +
-      '  font-size: 14px; ' +
-      '  font-weight: 700; ' +
-      '  letter-spacing: 2px; ' +
-      '  color: ' + accentColor + '; ' +
-      '  text-shadow: 0 0 10px rgba(0, 0, 0, 0.9), 0 0 20px ' + accentColor + '40; ' +
-      '  text-transform: uppercase; ' +
-      '}';
-    
-    if (this.canvas && this.canvas.parentElement) {
-      this.canvas.parentElement.appendChild(iconStyle);
-      this.canvas.parentElement.appendChild(indicator);
-      this._combatIndicator = indicator;
-      this._combatIndicatorStyle = iconStyle;
-
-      requestAnimationFrame(function() {
-        indicator.style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease-out';
-        indicator.style.transform = 'translate(-50%, -50%) scale(1)';
-        indicator.style.opacity = '1';
-      });
-
-      var self = this;
-      this._combatIndicatorTimer = setTimeout(function () {
-        if (self._combatIndicator) {
-          self._combatIndicator.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-          self._combatIndicator.style.opacity = '0';
-          self._combatIndicator.style.transform = 'translate(-50%, -50%) scale(0.9)';
-          setTimeout(function () {
-            if (self._combatIndicator && self._combatIndicator.parentElement) {
-              self._combatIndicator.parentElement.removeChild(self._combatIndicator);
-            }
-            if (self._combatIndicatorStyle && self._combatIndicatorStyle.parentElement) {
-              self._combatIndicatorStyle.parentElement.removeChild(self._combatIndicatorStyle);
-            }
-            self._combatIndicator = null;
-            self._combatIndicatorStyle = null;
-          }, 300);
-        }
-      }, 800);
-    }
-  }
-
-  _createSkullEmblemSVG(accentColor) {
-    return '<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
-      '<circle cx="24" cy="24" r="22" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.9"/>' +
-      '<circle cx="24" cy="24" r="18" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.6"/>' +
-      '<line x1="24" y1="0" x2="24" y2="6" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
-      '<line x1="24" y1="42" x2="24" y2="48" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
-      '<line x1="0" y1="24" x2="6" y2="24" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
-      '<line x1="42" y1="24" x2="48" y2="24" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
-      '<circle cx="24" cy="3" r="1.5" fill="' + accentColor + '" opacity="0.9"/>' +
-      '<path d="M 24 12 Q 18 12 16 16 Q 14 20 16 24 L 18 26 L 18 28 L 20 28 L 20 26 L 22 26 L 22 28 L 26 28 L 26 26 L 28 26 L 28 28 L 30 28 L 30 26 L 32 24 Q 34 20 32 16 Q 30 12 24 12 Z" fill="#ffffff" opacity="0.95"/>' +
-      '<ellipse cx="20" cy="19" rx="2.5" ry="3" fill="#0a0a0a" opacity="0.9"/>' +
-      '<ellipse cx="28" cy="19" rx="2.5" ry="3" fill="#0a0a0a" opacity="0.9"/>' +
-      '<path d="M 24 22 L 23 24 L 25 24 Z" fill="#0a0a0a" opacity="0.8"/>' +
-      '<circle cx="24" cy="24" r="23" fill="none" stroke="' + accentColor + '" stroke-width="0.5" opacity="0.3"/>' +
-    '</svg>';
   }
 
   /* ---------- Update Loop ---------- */
@@ -617,32 +448,6 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
           }
           if (target.mesh.userData.innerRing) {
             target.mesh.userData.innerRing.lookAt(camPos);
-          }
-        }
-
-        // Non-lethal hit animation
-        if (target.hitAnim > 0 && target.hp > 0) {
-          target.hitAnim -= dt * 6;
-          if (target.hitAnim > 0) {
-            var flash = target.hitAnim * 2;
-            if (target.mesh.userData.materials) {
-              for (var j = 0; j < target.mesh.userData.materials.length; j++) {
-                var mat = target.mesh.userData.materials[j];
-                if (mat.emissive) {
-                  mat.emissiveIntensity = 0.3 + flash * 1.5;
-                }
-              }
-            }
-          } else {
-            target.hitAnim = 0;
-            if (target.mesh.userData.materials) {
-              for (var j = 0; j < target.mesh.userData.materials.length; j++) {
-                var mat = target.mesh.userData.materials[j];
-                if (mat.emissive) {
-                  mat.emissiveIntensity = 0.3;
-                }
-              }
-            }
           }
         }
       } else {
@@ -714,21 +519,13 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       accuracy = Math.round((this._hitCount / this._shotsFired) * 100);
     }
 
-    var headshotPercentage = 0;
-    if (this._targetsKilled > 0) {
-      headshotPercentage = Math.round((this._headshots / this._targetsKilled) * 100);
-    }
-
     var elapsed = (Date.now() - this._sessionStartTime) / 1000;
     var killsPerSecond = elapsed > 0 ? (this._targetsKilled / elapsed).toFixed(2) : 0;
 
     return {
       targetsKilled: this._targetsKilled,
-      headshots: this._headshots,
-      bodyKills: this._bodyKills,
       shotsFired: this._shotsFired,
       accuracy: accuracy,
-      headshotPercentage: headshotPercentage,
       killsPerSecond: killsPerSecond,
       avgReactionTime: avgReactionTime,
     };
