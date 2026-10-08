@@ -122,11 +122,11 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
       moveDuration: 800 + Math.random() * 1200, // 0.8-2.0s between direction changes
     };
 
-    // Build humanoid bot
-    var botGroup = this._buildHumanoidBot(this.targetBaseRadius);
-    botGroup.position.set(pos.x, pos.y, pos.z);
-    this._scene.add(botGroup);
-    target.mesh = botGroup;
+    // Build circle target
+    var targetMesh = this._buildCircleTarget(this.targetBaseRadius);
+    targetMesh.position.set(pos.x, pos.y, pos.z);
+    this._scene.add(targetMesh);
+    target.mesh = targetMesh;
 
     this._targets.push(target);
   }
@@ -189,134 +189,70 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
     return pos;
   }
 
-  /* ---------- Build Humanoid Bot ---------- */
+  /* ---------- Build Circle Target ---------- */
 
-  _buildHumanoidBot(radius) {
+  _buildCircleTarget(radius) {
     var group = new THREE.Group();
     
-    // High-visibility cyan color scheme
-    var bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 0.4,
-      roughness: 0.3,
+    // Cyan color scheme to match the game's aesthetic
+    var targetColor = 0x00d4ff;
+    
+    // Main sphere (body hit zone - outer area)
+    var sphereGeo = new THREE.SphereGeometry(radius, 24, 24);
+    var sphereMat = new THREE.MeshStandardMaterial({
+      color: targetColor,
+      emissive: targetColor,
+      emissiveIntensity: 0.6,
+      roughness: 0.25,
       metalness: 0.6,
       transparent: true,
       opacity: 0,
     });
-    
-    var headMat = new THREE.MeshStandardMaterial({
-      color: 0xe0f4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 0.3,
-      roughness: 0.25,
-      metalness: 0.5,
+    var sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.userData.hitZone = 'body'; // Outer sphere = body shot
+    group.add(sphere);
+
+    // Inner core (headshot hit zone - center, smaller, harder to hit)
+    var coreRadius = radius * 0.35; // 35% of total radius = small, precise target
+    var coreGeo = new THREE.SphereGeometry(coreRadius, 16, 16);
+    var coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
       transparent: true,
       opacity: 0,
     });
-    
-    var accentMat = new THREE.MeshStandardMaterial({
-      color: 0x0088aa,
-      emissive: 0x0088aa,
-      emissiveIntensity: 0.35,
-      roughness: 0.35,
-      metalness: 0.7,
+    var core = new THREE.Mesh(coreGeo, coreMat);
+    core.userData.hitZone = 'head'; // Inner core = headshot
+    group.add(core);
+
+    // Outer ring (decorative, body hit zone)
+    var ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
+    var ringMat = new THREE.MeshBasicMaterial({
+      color: targetColor,
       transparent: true,
       opacity: 0,
+      side: THREE.DoubleSide,
     });
-    
-    var visorMat = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
+    var ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.userData.hitZone = 'body'; // Ring = body shot
+    group.add(ring);
+
+    // Inner ring (decorative, body hit zone)
+    var innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
+    var innerRingMat = new THREE.MeshBasicMaterial({
+      color: targetColor,
       transparent: true,
       opacity: 0,
+      side: THREE.DoubleSide,
     });
+    var innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
+    innerRing.userData.hitZone = 'body'; // Inner ring = body shot
+    group.add(innerRing);
 
-    var scale = radius / 0.4;
-
-    // HEAD
-    var headGeo = new THREE.SphereGeometry(0.18 * scale, 16, 16);
-    var head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 0.85 * scale;
-    head.userData.hitZone = 'head';
-    group.add(head);
-
-    // Visor
-    var visorGeo = new THREE.BoxGeometry(0.25 * scale, 0.06 * scale, 0.05 * scale);
-    var visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0, 0.85 * scale, -0.15 * scale);
-    visor.userData.hitZone = 'head';
-    group.add(visor);
-
-    // TORSO
-    var torsoGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.25 * scale);
-    var torso = new THREE.Mesh(torsoGeo, bodyMat);
-    torso.position.y = 0.45 * scale;
-    torso.userData.hitZone = 'body';
-    group.add(torso);
-
-    // Chest accent
-    var chestAccentGeo = new THREE.BoxGeometry(0.42 * scale, 0.08 * scale, 0.26 * scale);
-    var chestAccent = new THREE.Mesh(chestAccentGeo, accentMat);
-    chestAccent.position.y = 0.55 * scale;
-    chestAccent.userData.hitZone = 'body';
-    group.add(chestAccent);
-
-    // SHOULDERS
-    var shoulderGeo = new THREE.SphereGeometry(0.1 * scale, 12, 12);
-    var leftShoulder = new THREE.Mesh(shoulderGeo, accentMat);
-    leftShoulder.position.set(-0.25 * scale, 0.65 * scale, 0);
-    leftShoulder.userData.hitZone = 'body';
-    group.add(leftShoulder);
-
-    var rightShoulder = new THREE.Mesh(shoulderGeo, accentMat);
-    rightShoulder.position.set(0.25 * scale, 0.65 * scale, 0);
-    rightShoulder.userData.hitZone = 'body';
-    group.add(rightShoulder);
-
-    // ARMS
-    var armGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 0.4 * scale, 8);
-    var leftArm = new THREE.Mesh(armGeo, bodyMat);
-    leftArm.position.set(-0.28 * scale, 0.4 * scale, 0);
-    leftArm.userData.hitZone = 'body';
-    group.add(leftArm);
-
-    var rightArm = new THREE.Mesh(armGeo, bodyMat);
-    rightArm.position.set(0.28 * scale, 0.4 * scale, 0);
-    rightArm.userData.hitZone = 'body';
-    group.add(rightArm);
-
-    // HIPS
-    var hipsGeo = new THREE.BoxGeometry(0.35 * scale, 0.15 * scale, 0.22 * scale);
-    var hips = new THREE.Mesh(hipsGeo, bodyMat);
-    hips.position.y = 0.15 * scale;
-    hips.userData.hitZone = 'body';
-    group.add(hips);
-
-    // LEGS
-    var legGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.5 * scale, 8);
-    var leftLeg = new THREE.Mesh(legGeo, bodyMat);
-    leftLeg.position.set(-0.12 * scale, -0.2 * scale, 0);
-    leftLeg.userData.hitZone = 'body';
-    group.add(leftLeg);
-
-    var rightLeg = new THREE.Mesh(legGeo, bodyMat);
-    rightLeg.position.set(0.12 * scale, -0.2 * scale, 0);
-    rightLeg.userData.hitZone = 'body';
-    group.add(rightLeg);
-
-    // KNEES
-    var kneeGeo = new THREE.SphereGeometry(0.05 * scale, 8, 8);
-    var leftKnee = new THREE.Mesh(kneeGeo, accentMat);
-    leftKnee.position.set(-0.12 * scale, -0.05 * scale, 0.08 * scale);
-    leftKnee.userData.hitZone = 'body';
-    group.add(leftKnee);
-
-    var rightKnee = new THREE.Mesh(kneeGeo, accentMat);
-    rightKnee.position.set(0.12 * scale, -0.05 * scale, 0.08 * scale);
-    rightKnee.userData.hitZone = 'body';
-    group.add(rightKnee);
-
-    group.userData.materials = [bodyMat, headMat, accentMat, visorMat];
+    // Store materials for opacity animation
+    group.userData.materials = [sphereMat, coreMat, ringMat, innerRingMat];
+    group.userData.core = core;
+    group.userData.ring = ring;
+    group.userData.innerRing = innerRing;
 
     return group;
   }
@@ -670,14 +606,18 @@ VantageEngine.Renderers.AdjustshotRenderer = class AdjustshotRenderer extends Va
           }
         }
 
-        // Face camera
+        // Billboard the rings to face camera
         if (this._camera) {
           var camPos = this._camera.position.clone();
-          var botPos = target.mesh.position.clone();
-          var direction = new THREE.Vector3().subVectors(camPos, botPos);
-          direction.y = 0;
-          var angle = Math.atan2(direction.x, direction.z);
-          target.mesh.rotation.y = angle;
+          var targetPos = target.mesh.position.clone();
+          var direction = new THREE.Vector3().subVectors(camPos, targetPos);
+          // Make rings face the camera
+          if (target.mesh.userData.ring) {
+            target.mesh.userData.ring.lookAt(camPos);
+          }
+          if (target.mesh.userData.innerRing) {
+            target.mesh.userData.innerRing.lookAt(camPos);
+          }
         }
 
         // Non-lethal hit animation
