@@ -251,6 +251,56 @@ VantageEngine.Scoring = {
     };
   },
 
+  // Calculate score for an adjustshot session
+  // Rewards precision (accuracy), speed (reaction time), headshots, and kill pace.
+  calculateAdjustshotScore(adjustshotStats) {
+    var hits = adjustshotStats.hits || 0;
+    var misses = adjustshotStats.misses || 0;
+    var totalShots = adjustshotStats.shotsFired || (hits + misses);
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var avgReactionTime = adjustshotStats.avgReactionTime || 0; // ms
+    var targetsKilled = adjustshotStats.targetsKilled || 0;
+    var headshots = adjustshotStats.headshots || 0;
+    var bodyKills = adjustshotStats.bodyKills || 0;
+    var bestStreak = adjustshotStats.bestStreak || 0;
+    var duration = adjustshotStats.duration || 1;
+
+    // Precision score (0-400): accuracy is critical for micro-adjustment training
+    var precisionScore = accuracy * 400;
+
+    // Speed score (0-250): faster reaction times earn more
+    // Ideal: <500ms = full points, >1500ms = near zero
+    var speedScore = 0;
+    if (avgReactionTime > 0 && avgReactionTime < 2000) {
+      speedScore = Math.max(0, 250 - (avgReactionTime - 300) * 0.15);
+    }
+
+    // Headshot bonus (0-200): rewards precision headshots
+    var headshotRatio = targetsKilled > 0 ? headshots / targetsKilled : 0;
+    var headshotScore = headshotRatio * 200;
+
+    // Pace score (0-150): kills per second
+    var killsPerSec = targetsKilled / duration;
+    var paceScore = Math.min(150, killsPerSec * 75);
+
+    // Volume factor: ensure enough targets were killed
+    var expectedKills = Math.max(5, duration * 0.4);
+    var volume = Math.min(1, targetsKilled / expectedKills);
+
+    var total = Math.round((precisionScore + speedScore + headshotScore + paceScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      precisionScore: Math.round(precisionScore * volume),
+      speedScore: Math.round(speedScore * volume),
+      headshotScore: Math.round(headshotScore * volume),
+      paceScore: Math.round(paceScore * volume),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;

@@ -181,6 +181,33 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.grade = strafeScore.grade.letter;
         res.isBotStrafeMode = true;
       }
+      // For adjustshot mode: merge renderer adjustshot stats and recalculate score
+      if (engine.renderer && engine.renderer.getAdjustshotStats) {
+        var adj = engine.renderer.getAdjustshotStats();
+        var adjustshotInput = {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          avgReactionTime: adj.avgReactionTime,
+          targetsKilled: adj.targetsKilled,
+          headshots: adj.headshots,
+          bodyKills: adj.bodyKills,
+          shotsFired: adj.shotsFired,
+          bestStreak: res.stats.bestStreak || 0,
+          duration: res.stats.duration || 1,
+        };
+        var adjustshotScore = VantageEngine.Scoring.calculateAdjustshotScore(adjustshotInput);
+        res.stats.avgReactionTime = adj.avgReactionTime;
+        res.stats.targetsKilled = adj.targetsKilled;
+        res.stats.headshots = adj.headshots;
+        res.stats.bodyKills = adj.bodyKills;
+        res.stats.shotsFired = adj.shotsFired;
+        res.stats.accuracy = adj.accuracy;
+        res.stats.headshotPercentage = adj.headshotPercentage;
+        res.stats.killsPerSecond = adj.killsPerSecond;
+        res.score = adjustshotScore.total;
+        res.grade = adjustshotScore.grade.letter;
+        res.isAdjustshotMode = true;
+      }
       setResult(res);
       // Save the real result immediately so it is never lost
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
@@ -414,6 +441,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const isTargetSwitchingMode = scenario && scenario.id === 'target-switching-3d';
   const isReactiveTrackingMode = scenario && scenario.id === 'reactive-tracking-3d';
   const isBotStrafeMode = scenario && scenario.id === 'bot-strafe-3d';
+  const isAdjustshotMode = scenario && scenario.id === 'adjustshot-3d';
   const sd = tickData?.sessionData;
   const hits = isTrackingMode ? 0 : (sd?.hits || 0);
   const misses = isTrackingMode ? 0 : (sd?.misses || 0);
@@ -467,9 +495,23 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
                         duration: sd?.duration || 1,
                       }).total
                     : 0)
-                : (sd && totalShots > 0
-                    ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
-                    : 0);
+                : isAdjustshotMode
+                    ? (sd && totalShots > 0
+                        ? VantageEngine.Scoring.calculateAdjustshotScore({
+                            hits: hits,
+                            misses: misses,
+                            shotsFired: totalShots,
+                            avgReactionTime: sd.avgReactionTime || 0,
+                            targetsKilled: sd.hits || 0,
+                            headshots: sd.headshots || 0,
+                            bodyKills: sd.bodyKills || 0,
+                            bestStreak: sd.bestStreak || 0,
+                            duration: sd?.duration || 1,
+                          }).total
+                        : 0)
+                    : (sd && totalShots > 0
+                        ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
+                        : 0);
   const progression = tickData?.progression || 0;
 
   const remainingSec = tickData && tickData.remaining !== null && tickData.remaining !== undefined
@@ -694,6 +736,76 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           bsSummary && e('div', { className: 'vresults-config' }, bsSummary),
+          e('div', { className: 'vresults-actions' },
+            e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
+            e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
+            e(VantageUI.Button, { variant: 'primary', onClick: handlePlayAgain }, 'PLAY AGAIN'),
+          ),
+        ),
+      );
+    }
+
+    // Adjustshot results screen
+    var isAdjustshot = result.isAdjustshotMode || (scenario && scenario.id === 'adjustshot-3d');
+    if (isAdjustshot) {
+      var adjShots = result.stats.shotsFired || ((result.stats.hits || 0) + (result.stats.misses || 0));
+      var adjAccuracy = result.stats.accuracy || (adjShots > 0 ? Math.round((result.stats.hits / adjShots) * 100) : 0);
+      var adjAvgRT = result.stats.avgReactionTime || 0;
+      var adjTargetsKilled = result.stats.targetsKilled || 0;
+      var adjHeadshots = result.stats.headshots || 0;
+      var adjBodyKills = result.stats.bodyKills || 0;
+      var adjHeadshotPct = result.stats.headshotPercentage || (adjTargetsKilled > 0 ? Math.round((adjHeadshots / adjTargetsKilled) * 100) : 0);
+      var adjKillsPerSec = result.stats.killsPerSecond || (result.stats.duration > 0 ? (adjTargetsKilled / result.stats.duration).toFixed(2) : 0);
+      var adjSummary = [
+        dur && dur.label,
+        weaponUsed,
+      ].filter(Boolean).join(' · ');
+
+      var adjSaveLine = 'Saving session…';
+      var adjSaveClass = 'vresults-save';
+      if (saveInfo) {
+        if (saveInfo.previousBest === null) adjSaveLine = 'First session saved to your history';
+        else if (saveInfo.isPersonalBest) { adjSaveLine = '★ NEW PERSONAL BEST'; adjSaveClass += ' vresults-save-pb'; }
+        else adjSaveLine = 'Session saved · Personal best ' + saveInfo.previousBest;
+      }
+
+      return e('div', { className: 'vpage-gameplay vpage-results-overlay' },
+        e('div', { className: 'vresults-screen animate-in' },
+          e('div', { className: 'vresults-scenario' }, 'ADJUSTSHOT — 3D — Complete'),
+          e('div', { className: 'vresults-grade', style: { color: grade.color || 'var(--accent-primary)' } },
+            e('span', { className: 'vresults-grade-letter' }, result.grade),
+            e('span', { className: 'vresults-grade-label' }, grade.label || ''),
+          ),
+          e('div', { className: 'vresults-score' },
+            e('span', { className: 'vresults-score-value' }, result.score),
+            e('span', { className: 'vresults-score-label' }, 'SCORE'),
+          ),
+          e('div', { className: adjSaveClass }, adjSaveLine),
+          e('div', { className: 'vresults-stats' },
+            [
+              [result.score, 'Score'],
+              [adjAccuracy + '%', 'Accuracy'],
+              [adjAvgRT > 0 ? adjAvgRT + 'ms' : '—', 'Avg Reaction Time'],
+              [adjTargetsKilled, 'Targets Killed'],
+              [adjHeadshots, 'Headshots'],
+              [adjBodyKills, 'Body Kills'],
+              [adjHeadshotPct + '%', 'Headshot %'],
+              [adjKillsPerSec, 'Kills/Second'],
+              [result.stats.hits || 0, 'Hits'],
+              [result.stats.misses || 0, 'Misses'],
+              [adjShots, 'Shots Fired'],
+              [result.stats.bestStreak || 0, 'Best Hit Streak'],
+              [result.stats.duration + 's', 'Session Duration'],
+              [weaponUsed, 'Weapon Used'],
+            ].map(function (pair) {
+              var value = pair[0], label = pair[1];
+              return e('div', { key: label, className: 'vresults-stat' },
+                e('span', { className: 'vresults-stat-value' }, value),
+                e('span', { className: 'vresults-stat-label' }, label),
+              );
+            })
+          ),
+          adjSummary && e('div', { className: 'vresults-config' }, adjSummary),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
