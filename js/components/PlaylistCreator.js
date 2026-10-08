@@ -11,6 +11,7 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
   const [savedPlaylists, setSavedPlaylists] = useState([]);
   const [showSavedPlaylists, setShowSavedPlaylists] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const allScenarios = VantageEngine.Scenarios.getEnabled();
   const Settings = VantageEngine.Settings;
@@ -162,18 +163,39 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
   };
 
   const handleDelete = async (playlistId) => {
-    if (!confirm('Delete this playlist?')) return;
+    // Show custom confirmation dialog instead of using confirm()
+    setDeleteConfirmId(playlistId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
 
     try {
       if (user && user.uid) {
-        await DB.deletePlaylist(playlistId, user.uid);
+        await DB.deletePlaylist(deleteConfirmId, user.uid);
       } else {
-        DB.deleteLocalPlaylist(playlistId);
+        DB.deleteLocalPlaylist(deleteConfirmId);
       }
+      setSaveMessage('Playlist deleted.');
       await loadSavedPlaylists();
     } catch (err) {
       console.error('Failed to delete playlist:', err);
+      // Try local storage fallback
+      try {
+        DB.deleteLocalPlaylist(deleteConfirmId);
+        setSaveMessage('Playlist deleted.');
+        await loadSavedPlaylists();
+      } catch (e2) {
+        console.error('Failed to delete locally:', e2);
+        setSaveMessage('Failed to delete playlist.');
+      }
+    } finally {
+      setDeleteConfirmId(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmId(null);
   };
 
   const formatPlaylistDuration = (items) => {
@@ -364,6 +386,27 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
             onClick: handleSave,
             disabled: !playlistName.trim(),
           }, 'SAVE'),
+        ),
+      ),
+    ),
+    
+    // Delete confirmation dialog
+    deleteConfirmId && e('div', { className: 'vplaylist-save-dialog' },
+      e('div', { className: 'vplaylist-save-dialog-content' },
+        e('h4', null, 'Delete Playlist'),
+        e('p', { style: { marginBottom: '16px', color: 'var(--text-secondary)' } }, 
+          'Are you sure you want to delete this playlist?'),
+        e('div', { className: 'vplaylist-save-dialog-actions' },
+          e(VantageUI.Button, { 
+            variant: 'ghost', 
+            size: 'sm',
+            onClick: cancelDelete,
+          }, 'CANCEL'),
+          e(VantageUI.Button, { 
+            variant: 'danger', 
+            size: 'sm',
+            onClick: confirmDelete,
+          }, 'DELETE'),
         ),
       ),
     ),
