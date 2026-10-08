@@ -42,6 +42,14 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     this._hitTimes = []; // time from spawn to hit
     this._targetsDestroyed = 0;
 
+    // Bot health system
+    this._botHP = 4; // 4 body-shot HP
+    this._maxBotHP = 4;
+
+    // Combat indicators
+    this._combatIndicator = null;
+    this._combatIndicatorTimer = null;
+
     // Override target radius
     var S = VantageEngine.Settings;
     var sizeSetting = S.getTargetSize(config.targetSize || 'medium');
@@ -62,6 +70,8 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     this._targetsDestroyed = 0;
     this._target = null;
     this._targetSpawnTime = 0;
+    this._botHP = this._maxBotHP;
+    this._combatIndicator = null;
 
     // Initialize movement state
     this._moveState = 'IDLE';
@@ -89,6 +99,12 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     this._hitTimes = [];
     this._targetsDestroyed = 0;
     this._target = null;
+    this._botHP = this._maxBotHP;
+    this._combatIndicator = null;
+    if (this._combatIndicatorTimer) {
+      clearTimeout(this._combatIndicatorTimer);
+      this._combatIndicatorTimer = null;
+    }
   }
 
   /* ---------- Target Spawning ---------- */
@@ -100,6 +116,9 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     if (this._target) {
       this._clearTarget();
     }
+
+    // Reset bot health for new bot
+    this._botHP = this._maxBotHP;
 
     // Random position within movement bounds
     var x = this._movementBounds.minX + Math.random() * (this._movementBounds.maxX - this._movementBounds.minX);
@@ -191,70 +210,83 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     var headGeo = new THREE.SphereGeometry(0.18 * scale, 16, 16);
     var head = new THREE.Mesh(headGeo, headMat);
     head.position.y = 0.85 * scale;
+    head.userData.hitZone = 'head'; // Tag for hit detection
     group.add(head);
 
     // Visor - flat box across face (bright glowing cyan)
     var visorGeo = new THREE.BoxGeometry(0.25 * scale, 0.06 * scale, 0.05 * scale);
     var visor = new THREE.Mesh(visorGeo, visorMat);
     visor.position.set(0, 0.85 * scale, -0.15 * scale);
+    visor.userData.hitZone = 'head'; // Tag for hit detection
     group.add(visor);
 
     // TORSO - box
     var torsoGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.25 * scale);
     var torso = new THREE.Mesh(torsoGeo, bodyMat);
     torso.position.y = 0.45 * scale;
+    torso.userData.hitZone = 'body'; // Tag for hit detection
     group.add(torso);
 
     // Chest accent - orange stripe
     var chestAccentGeo = new THREE.BoxGeometry(0.42 * scale, 0.08 * scale, 0.26 * scale);
     var chestAccent = new THREE.Mesh(chestAccentGeo, accentMat);
     chestAccent.position.y = 0.55 * scale;
+    chestAccent.userData.hitZone = 'body'; // Tag for hit detection
     group.add(chestAccent);
 
     // SHOULDERS - two spheres
     var shoulderGeo = new THREE.SphereGeometry(0.1 * scale, 12, 12);
     var leftShoulder = new THREE.Mesh(shoulderGeo, accentMat);
     leftShoulder.position.set(-0.25 * scale, 0.65 * scale, 0);
+    leftShoulder.userData.hitZone = 'body'; // Tag for hit detection
     group.add(leftShoulder);
 
     var rightShoulder = new THREE.Mesh(shoulderGeo, accentMat);
     rightShoulder.position.set(0.25 * scale, 0.65 * scale, 0);
+    rightShoulder.userData.hitZone = 'body'; // Tag for hit detection
     group.add(rightShoulder);
 
     // ARMS - cylinders
     var armGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 0.4 * scale, 8);
     var leftArm = new THREE.Mesh(armGeo, bodyMat);
     leftArm.position.set(-0.28 * scale, 0.4 * scale, 0);
+    leftArm.userData.hitZone = 'body'; // Tag for hit detection
     group.add(leftArm);
 
     var rightArm = new THREE.Mesh(armGeo, bodyMat);
     rightArm.position.set(0.28 * scale, 0.4 * scale, 0);
+    rightArm.userData.hitZone = 'body'; // Tag for hit detection
     group.add(rightArm);
 
     // HIPS - box
     var hipsGeo = new THREE.BoxGeometry(0.35 * scale, 0.15 * scale, 0.22 * scale);
     var hips = new THREE.Mesh(hipsGeo, bodyMat);
     hips.position.y = 0.15 * scale;
+    hips.userData.hitZone = 'body'; // Tag for hit detection
     group.add(hips);
 
     // LEGS - cylinders
     var legGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.5 * scale, 8);
     var leftLeg = new THREE.Mesh(legGeo, bodyMat);
     leftLeg.position.set(-0.12 * scale, -0.2 * scale, 0);
+    leftLeg.userData.hitZone = 'body'; // Tag for hit detection
     group.add(leftLeg);
 
     var rightLeg = new THREE.Mesh(legGeo, bodyMat);
     rightLeg.position.set(0.12 * scale, -0.2 * scale, 0);
+    rightLeg.userData.hitZone = 'body'; // Tag for hit detection
     group.add(rightLeg);
 
     // KNEE accents - orange circles
     var kneeGeo = new THREE.SphereGeometry(0.05 * scale, 8, 8);
     var leftKnee = new THREE.Mesh(kneeGeo, accentMat);
     leftKnee.position.set(-0.12 * scale, -0.05 * scale, 0.08 * scale);
+    leftKnee.userData.hitZone = 'body'; // Tag for hit detection
     group.add(leftKnee);
 
     var rightKnee = new THREE.Mesh(kneeGeo, accentMat);
     rightKnee.position.set(0.12 * scale, -0.05 * scale, 0.08 * scale);
+    rightKnee.userData.hitZone = 'body'; // Tag for hit detection
     group.add(rightKnee);
 
     // Store materials for opacity animation
@@ -479,36 +511,141 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
       }
 
       if (isPartOfBot && this._target.alive) {
-        this._target.alive = false;
-        this._target.hitAnim = 1.0;
-        this._hitCount++;
-        this._targetsDestroyed++;
+        // Determine hit zone (head or body)
+        var hitZone = hitObj.userData.hitZone || 'body';
+        var isHeadshot = (hitZone === 'head');
 
-        // Create particle burst
+        // Apply damage
+        if (isHeadshot) {
+          // Headshot instantly kills the bot
+          this._botHP = 0;
+          this._showCombatIndicator('HEADSHOT');
+        } else {
+          // Body shot removes 1 HP
+          this._botHP--;
+          if (this._botHP <= 0) {
+            // Final body shot - bot dies
+            this._showCombatIndicator('BODY KILL');
+          } else {
+            // Bot survives
+            this._showCombatIndicator('BODY HIT');
+          }
+        }
+
+        // Create particle burst at hit location
         this._createHitParticles(this._target.mesh.position.clone());
 
-        // Calculate survival time and hit time
-        var survivalTime = now - this._targetSpawnTime;
-        this._targetSurvivalTimes.push(survivalTime);
-        this._hitTimes.push(survivalTime);
+        // Check if bot is dead
+        if (this._botHP <= 0) {
+          // Bot dies
+          this._target.alive = false;
+          this._target.hitAnim = 1.0;
+          this._hitCount++;
+          this._targetsDestroyed++;
 
-        // Report hit
-        if (this._onHit) this._onHit(survivalTime);
-        hit = true;
-
-        // Spawn replacement after delay
-        var self = this;
-        setTimeout(function () {
-          if (self._stopped) return;
-          self._clearTarget();
-          if (self.running) {
-            self._spawnTarget();
+          // Play kill sound
+          if (VantageEngine.Audio && VantageEngine.Audio.playKillSound) {
+            VantageEngine.Audio.playKillSound();
           }
-        }, 150);
+
+          // Calculate survival time and hit time
+          var survivalTime = now - this._targetSpawnTime;
+          this._targetSurvivalTimes.push(survivalTime);
+          this._hitTimes.push(survivalTime);
+
+          // Report hit to engine
+          if (this._onHit) this._onHit(survivalTime);
+          hit = true;
+
+          // Spawn replacement after delay
+          var self = this;
+          setTimeout(function () {
+            if (self._stopped) return;
+            self._clearTarget();
+            if (self.running) {
+              self._spawnTarget();
+            }
+          }, 150);
+        } else {
+          // Bot survives - show hit animation but don't kill
+          this._target.hitAnim = 0.5; // Smaller hit animation for non-lethal hits
+          hit = true;
+          
+          // Report hit to engine (for scoring)
+          var survivalTime = now - this._targetSpawnTime;
+          if (this._onHit) this._onHit(survivalTime);
+        }
       }
     }
 
     if (!hit && this._onMiss) this._onMiss();
+  }
+
+  /* ---------- Combat Indicator ---------- */
+
+  _showCombatIndicator(text) {
+    // Clear any existing indicator
+    if (this._combatIndicatorTimer) {
+      clearTimeout(this._combatIndicatorTimer);
+      this._combatIndicatorTimer = null;
+    }
+
+    // Remove existing indicator element if present
+    if (this._combatIndicator && this._combatIndicator.parentElement) {
+      this._combatIndicator.parentElement.removeChild(this._combatIndicator);
+    }
+
+    // Create new indicator element
+    var indicator = document.createElement('div');
+    indicator.className = 'bot-strafe-combat-indicator';
+    indicator.textContent = text;
+    
+    // Style based on type
+    if (text === 'HEADSHOT') {
+      indicator.style.color = '#ff0000';
+      indicator.style.fontSize = '32px';
+      indicator.style.fontWeight = 'bold';
+    } else if (text === 'BODY KILL') {
+      indicator.style.color = '#ffaa00';
+      indicator.style.fontSize = '28px';
+      indicator.style.fontWeight = 'bold';
+    } else {
+      // BODY HIT
+      indicator.style.color = '#ffffff';
+      indicator.style.fontSize = '24px';
+      indicator.style.fontWeight = 'normal';
+    }
+
+    // Position in center of canvas
+    indicator.style.position = 'absolute';
+    indicator.style.left = '50%';
+    indicator.style.top = '40%';
+    indicator.style.transform = 'translate(-50%, -50%)';
+    indicator.style.pointerEvents = 'none';
+    indicator.style.textShadow = '0 0 10px rgba(0,0,0,0.8)';
+    indicator.style.zIndex = '1000';
+    indicator.style.opacity = '1';
+    indicator.style.transition = 'opacity 0.3s ease-out';
+
+    // Add to canvas parent
+    if (this.canvas && this.canvas.parentElement) {
+      this.canvas.parentElement.appendChild(indicator);
+      this._combatIndicator = indicator;
+
+      // Fade out and remove after 600ms
+      var self = this;
+      this._combatIndicatorTimer = setTimeout(function () {
+        if (self._combatIndicator) {
+          self._combatIndicator.style.opacity = '0';
+          setTimeout(function () {
+            if (self._combatIndicator && self._combatIndicator.parentElement) {
+              self._combatIndicator.parentElement.removeChild(self._combatIndicator);
+            }
+            self._combatIndicator = null;
+          }, 300);
+        }
+      }, 600);
+    }
   }
 
   /* ---------- Override: update loop ---------- */
@@ -549,8 +686,36 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
         var angle = Math.atan2(direction.x, direction.z);
         t.mesh.rotation.y = angle;
       }
+
+      // Handle non-lethal hit animation (bot survives)
+      if (t.hitAnim > 0 && this._botHP > 0) {
+        t.hitAnim -= dt * 6;
+        if (t.hitAnim > 0) {
+          // Flash effect for body shots
+          var flash = t.hitAnim * 2;
+          if (t.mesh.userData.materials) {
+            for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+              var mat = t.mesh.userData.materials[i];
+              if (mat.emissive) {
+                mat.emissiveIntensity = 0.3 + flash * 1.5;
+              }
+            }
+          }
+        } else {
+          t.hitAnim = 0;
+          // Reset emissive to normal
+          if (t.mesh.userData.materials) {
+            for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+              var mat = t.mesh.userData.materials[i];
+              if (mat.emissive) {
+                mat.emissiveIntensity = 0.3;
+              }
+            }
+          }
+        }
+      }
     } else if (this._target && !this._target.alive) {
-      // Hit animation
+      // Hit animation (bot is dead)
       var t = this._target;
       t.hitAnim -= dt * 6;
       if (t.hitAnim <= 0) {

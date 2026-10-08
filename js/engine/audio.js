@@ -110,6 +110,72 @@ VantageEngine.Audio = (function () {
     [660, 880, 1100].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.35, gain: 0.2, start: i * 0.11 }));
   }
 
+  // Kill sound for bot elimination (inspired by reference audio)
+  function playKillSound() {
+    if (!ready()) return;
+    const t0 = ctx.currentTime;
+
+    // Layer 1: Low impact thump (satisfying bass hit)
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(120, t0);
+    thump.frequency.exponentialRampToValueAtTime(40, t0 + 0.15);
+    thumpGain.gain.setValueAtTime(0.6, t0);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+    thump.connect(thumpGain);
+    thumpGain.connect(sfxBus);
+    thump.start(t0);
+    thump.stop(t0 + 0.2);
+
+    // Layer 2: Mid-range impact (the "thwack" sound)
+    const impact = ctx.createOscillator();
+    const impactGain = ctx.createGain();
+    impact.type = 'triangle';
+    impact.frequency.setValueAtTime(400, t0);
+    impact.frequency.exponentialRampToValueAtTime(150, t0 + 0.08);
+    impactGain.gain.setValueAtTime(0.35, t0);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.1);
+    impact.connect(impactGain);
+    impactGain.connect(sfxBus);
+    impact.start(t0);
+    impact.stop(t0 + 0.12);
+
+    // Layer 3: High-frequency crisp (the "ding" of elimination)
+    const crisp = ctx.createOscillator();
+    const crispGain = ctx.createGain();
+    crisp.type = 'sine';
+    crisp.frequency.setValueAtTime(1800, t0 + 0.02);
+    crisp.frequency.exponentialRampToValueAtTime(1200, t0 + 0.12);
+    crispGain.gain.setValueAtTime(0.0001, t0);
+    crispGain.gain.linearRampToValueAtTime(0.25, t0 + 0.02);
+    crispGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15);
+    crisp.connect(crispGain);
+    crispGain.connect(sfxBus);
+    crisp.start(t0);
+    crisp.stop(t0 + 0.17);
+
+    // Layer 4: Noise burst for texture (short burst)
+    const bufferSize = Math.floor(ctx.sampleRate * 0.06);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.2, t0);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 2500;
+    noiseFilter.Q.value = 1.2;
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(sfxBus);
+    noise.start(t0);
+    noise.stop(t0 + 0.07);
+  }
+
   function playShoot() {
     if (!ready()) return;
     const t0 = ctx.currentTime;
@@ -365,7 +431,7 @@ VantageEngine.Audio = (function () {
       applyVolumes(false);
     },
     getVolumes() { return { ...vols }; },
-    playHit, playMiss, playTick, playGo, playFinish, playShoot, playWeaponFire,
+    playHit, playMiss, playTick, playGo, playFinish, playShoot, playWeaponFire, playKillSound,
     startMusic, stopMusic,
     isMusicPlaying() { return !!musicSession; },
   };
