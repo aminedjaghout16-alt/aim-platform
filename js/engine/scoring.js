@@ -206,6 +206,51 @@ VantageEngine.Scoring = {
     };
   },
 
+  // Calculate score for a bot strafe session
+  // Rewards accuracy, fast target kills, consistent tracking, and streaks.
+  calculateBotStrafeScore(strafeStats) {
+    var hits = strafeStats.hits || 0;
+    var misses = strafeStats.misses || 0;
+    var totalShots = hits + misses;
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var avgHitTime = strafeStats.avgHitTime || 0; // ms
+    var targetsDestroyed = strafeStats.targetsDestroyed || 0;
+    var bestStreak = strafeStats.bestStreak || 0;
+    var duration = strafeStats.duration || 1;
+
+    // Accuracy score (0-400): high accuracy is essential
+    var accuracyScore = accuracy * 400;
+
+    // Speed score (0-300): faster hit times earn more
+    // Ideal: <800ms avg = full points, >3000ms = near zero
+    var speedScore = 0;
+    if (avgHitTime > 0 && avgHitTime < 3500) {
+      speedScore = Math.max(0, 300 - (avgHitTime - 400) * 0.1);
+    }
+
+    // Consistency score (0-200): based on best streak relative to total hits
+    var streakScore = 0;
+    if (hits > 0 && bestStreak > 0) {
+      var streakRatio = bestStreak / hits;
+      streakScore = streakRatio * 200;
+    }
+
+    // Volume factor: ensure enough targets were destroyed
+    var expectedHits = Math.max(5, duration * 0.35);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((accuracyScore + speedScore + streakScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      speedScore: Math.round(speedScore * volume),
+      consistencyScore: Math.round(streakScore * volume),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;
