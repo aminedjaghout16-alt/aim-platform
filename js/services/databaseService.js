@@ -209,4 +209,70 @@ VantageServices.DatabaseService = {
     });
     return results;
   },
+
+  // ─── Saved Playlists ─────────────────────────────────
+
+  async savePlaylist(userId, playlist) {
+    var db = this._db();
+    var docData = {
+      userId: userId,
+      name: playlist.name || 'Untitled Playlist',
+      items: playlist.items || [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    var ref = await db.collection('playlists').add(docData);
+    return { id: ref.id, ...docData };
+  },
+
+  async getUserPlaylists(userId) {
+    var db = this._db();
+    var snap = await db.collection('playlists')
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    var playlists = [];
+    snap.forEach(function (doc) {
+      playlists.push({ id: doc.id, ...doc.data() });
+    });
+    return playlists;
+  },
+
+  async deletePlaylist(playlistId, userId) {
+    var db = this._db();
+    var doc = await db.collection('playlists').doc(playlistId).get();
+    if (doc.exists && doc.data().userId === userId) {
+      await db.collection('playlists').doc(playlistId).delete();
+    }
+  },
+
+  // Local storage fallback for non-logged-in users
+  getLocalPlaylists() {
+    try {
+      var data = localStorage.getItem('vantage.playlists');
+      return data ? JSON.parse(data) : [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  saveLocalPlaylist(playlist) {
+    try {
+      var playlists = this.getLocalPlaylists();
+      playlist.id = 'local_' + Date.now();
+      playlist.createdAt = new Date().toISOString();
+      playlists.unshift(playlist);
+      localStorage.setItem('vantage.playlists', JSON.stringify(playlists));
+      return playlist;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  deleteLocalPlaylist(playlistId) {
+    try {
+      var playlists = this.getLocalPlaylists();
+      playlists = playlists.filter(function(p) { return p.id !== playlistId; });
+      localStorage.setItem('vantage.playlists', JSON.stringify(playlists));
+    } catch (err) {}
+  },
 };

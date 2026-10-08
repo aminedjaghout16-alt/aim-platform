@@ -3,12 +3,37 @@
    ============================================ */
 window.VantageComponents = window.VantageComponents || {};
 
-VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onStartPlaylist, onClose }) {
+VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onStartPlaylist, onClose, user, onLoadPlaylist }) {
   const [playlist, setPlaylist] = useState([]);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [playlistName, setPlaylistName] = useState('');
+  const [savedPlaylists, setSavedPlaylists] = useState([]);
+  const [showSavedPlaylists, setShowSavedPlaylists] = useState(false);
 
   const allScenarios = VantageEngine.Scenarios.getEnabled();
   const Settings = VantageEngine.Settings;
+  const DB = VantageServices.DatabaseService;
+
+  // Load saved playlists on mount
+  useEffect(() => {
+    loadSavedPlaylists();
+  }, [user]);
+
+  const loadSavedPlaylists = async () => {
+    try {
+      if (user && user.uid) {
+        var playlists = await DB.getUserPlaylists(user.uid);
+        setSavedPlaylists(playlists);
+      } else {
+        var localPlaylists = DB.getLocalPlaylists();
+        setSavedPlaylists(localPlaylists);
+      }
+    } catch (err) {
+      console.error('Failed to load playlists:', err);
+      setSavedPlaylists([]);
+    }
+  };
 
   const addExercise = (scenarioId) => {
     const scenario = VantageEngine.Scenarios.getById(scenarioId);
@@ -69,6 +94,60 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
   const handleStart = () => {
     if (playlist.length === 0) return;
     onStartPlaylist(playlist);
+  };
+
+  const handleSave = async () => {
+    if (playlist.length === 0 || !playlistName.trim()) return;
+
+    try {
+      const playlistData = {
+        name: playlistName.trim(),
+        items: playlist,
+      };
+
+      if (user && user.uid) {
+        await DB.savePlaylist(user.uid, playlistData);
+      } else {
+        DB.saveLocalPlaylist(playlistData);
+      }
+
+      setPlaylistName('');
+      setShowSaveDialog(false);
+      await loadSavedPlaylists();
+    } catch (err) {
+      console.error('Failed to save playlist:', err);
+    }
+  };
+
+  const handleLoad = (savedPlaylist) => {
+    if (onLoadPlaylist) {
+      onLoadPlaylist(savedPlaylist.items);
+    } else {
+      setPlaylist(savedPlaylist.items);
+    }
+    setShowSavedPlaylists(false);
+  };
+
+  const handleDelete = async (playlistId) => {
+    if (!confirm('Delete this playlist?')) return;
+
+    try {
+      if (user && user.uid) {
+        await DB.deletePlaylist(playlistId, user.uid);
+      } else {
+        DB.deleteLocalPlaylist(playlistId);
+      }
+      await loadSavedPlaylists();
+    } catch (err) {
+      console.error('Failed to delete playlist:', err);
+    }
+  };
+
+  const formatPlaylistDuration = (items) => {
+    const totalSec = items.reduce((sum, item) => sum + (item.durationSeconds || 60), 0);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return e('div', { className: 'vmodal-backdrop', onClick: onClose },
@@ -156,18 +235,96 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
               )
             ),
 
-        // Total time and start button
+        // Total time and action buttons
         playlist.length > 0 && e('div', { className: 'vplaylist-footer' },
           e('div', { className: 'vplaylist-total' },
             e('span', null, 'TOTAL TIME:'),
             e('span', { className: 'vplaylist-total-time' }, totalTimeText),
           ),
-          e(VantageUI.Button, { 
-            variant: 'primary', 
-            size: 'lg',
-            onClick: handleStart,
-            style: { width: '100%' },
-          }, 'START PLAYLIST'),
+          e('div', { className: 'vplaylist-action-buttons' },
+            e(VantageUI.Button, { 
+              variant: 'secondary', 
+              onClick: () => setShowSaveDialog(true),
+              disabled: playlist.length === 0,
+            }, 'SAVE PLAYLIST'),
+            e(VantageUI.Button, { 
+              variant: 'primary', 
+              size: 'lg',
+              onClick: handleStart,
+              style: { flex: 1 },
+            }, 'START PLAYLIST'),
+          ),
+        ),
+
+        // Save dialog
+        showSaveDialog && e('div', { className: 'vplaylist-save-dialog' },
+          e('div', { className: 'vplaylist-save-dialog-content' },
+            e('h4', null, 'Save Playlist'),
+            e('input', {
+              type: 'text',
+              className: 'vplaylist-name-input',
+              placeholder: 'Enter playlist name...',
+              value: playlistName,
+              onChange: (ev) => setPlaylistName(ev.target.value),
+              autoFocus: true,
+              onKeyPress: (ev) => {
+                if (ev.key === 'Enter') handleSave();
+              },
+            }),
+            e('div', { className: 'vplaylist-save-dialog-actions' },
+              e(VantageUI.Button, { 
+                variant: 'ghost', 
+                size: 'sm',
+                onClick: () => {
+                  setShowSaveDialog(false);
+                  setPlaylistName('');
+                },
+              }, 'CANCEL'),
+              e(VantageUI.Button, { 
+                variant: 'primary', 
+                size: 'sm',
+                onClick: handleSave,
+                disabled: !playlistName.trim(),
+              }, 'SAVE'),
+            ),
+          ),
+        ),
+
+        // My Playlists section
+        e('div', { className: 'vplaylist-my-playlists-section' },
+          e('div', { 
+            className: 'vplaylist-my-playlists-header',
+            onClick: () => setShowSavedPlaylists(!showSavedPlaylists),
+          },
+            e('span', null, `MY PLAYLISTS (${savedPlaylists.length})`),
+            e('span', { className: 'vplaylist-toggle-icon' }, showSavedPlaylists ? '▼' : '▶'),
+          ),
+          showSavedPlaylists && e('div', { className: 'vplaylist-saved-list' },
+            savedPlaylists.length === 0 
+              ? e('div', { className: 'vplaylist-no-saved' }, 'No saved playlists yet')
+              : savedPlaylists.map((saved) => 
+                  e('div', { key: saved.id, className: 'vplaylist-saved-item' },
+                    e('div', { className: 'vplaylist-saved-info' },
+                      e('div', { className: 'vplaylist-saved-name' }, saved.name),
+                      e('div', { className: 'vplaylist-saved-meta' }, 
+                        `${saved.items.length} exercise${saved.items.length !== 1 ? 's' : ''} · ${formatPlaylistDuration(saved.items)}`
+                      ),
+                    ),
+                    e('div', { className: 'vplaylist-saved-actions' },
+                      e(VantageUI.Button, { 
+                        variant: 'secondary', 
+                        size: 'sm',
+                        onClick: () => handleLoad(saved),
+                      }, 'LOAD'),
+                      e(VantageUI.Button, { 
+                        variant: 'ghost', 
+                        size: 'sm',
+                        onClick: () => handleDelete(saved.id),
+                      }, 'DELETE'),
+                    ),
+                  )
+                ),
+          ),
         ),
       ),
     ),

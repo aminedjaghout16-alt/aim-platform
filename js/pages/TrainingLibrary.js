@@ -3,7 +3,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario, onQuickStart, onCreatePlaylist }) {
+VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario, onQuickStart, onCreatePlaylist, user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterDifficulty, setFilterDifficulty] = useState('all');
@@ -90,6 +90,7 @@ VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectSc
         if (onCreatePlaylist) onCreatePlaylist(playlist);
       },
       onClose: () => setShowPlaylistCreator(false),
+      user: user,
     }),
 
     // Search & Filters Bar

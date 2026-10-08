@@ -214,6 +214,7 @@
             onSelectScenario: handleSelectScenario,
             onQuickStart: handleQuickStart,
             onCreatePlaylist: handleCreatePlaylist,
+            user: user,
           });
         case 'details':
           return e(VantagePages.TrainingDetails, {
