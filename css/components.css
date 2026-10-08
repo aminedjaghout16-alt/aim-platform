@@ -2706,12 +2706,14 @@
   color: var(--text-primary);
 }
 
-.vplaylist-item-duration {
-  min-width: 80px;
+.vplaylist-item-settings {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
+.vplaylist-difficulty-select,
 .vplaylist-duration-select {
-  width: 100%;
   padding: 6px 10px;
   background: var(--bg-base);
   border: 1px solid var(--border-subtle);
@@ -2719,6 +2721,7 @@
   color: var(--text-primary);
   font-size: 0.9rem;
   cursor: pointer;
+  min-width: 80px;
 }
 
 .vplaylist-remove-btn {

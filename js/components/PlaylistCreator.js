@@ -19,6 +19,7 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
       name: scenario.name,
       duration: 'standard', // Default to 60s
       durationSeconds: 60,
+      difficulty: 'medium', // Default difficulty
     }]);
     setShowAddMenu(false);
   };
@@ -47,6 +48,15 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
       ...newPlaylist[index],
       duration: durationId,
       durationSeconds: durationSetting ? durationSetting.seconds : 60,
+    };
+    setPlaylist(newPlaylist);
+  };
+
+  const updateDifficulty = (index, difficultyId) => {
+    const newPlaylist = [...playlist];
+    newPlaylist[index] = {
+      ...newPlaylist[index],
+      difficulty: difficultyId,
     };
     setPlaylist(newPlaylist);
   };
@@ -117,7 +127,17 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
                     e('div', { className: 'vplaylist-item-number' }, `${index + 1}.`),
                     e('div', { className: 'vplaylist-item-name' }, item.name),
                   ),
-                  e('div', { className: 'vplaylist-item-duration' },
+                  e('div', { className: 'vplaylist-item-settings' },
+                    e('select', {
+                      className: 'vplaylist-difficulty-select',
+                      value: item.difficulty || 'medium',
+                      onChange: (ev) => updateDifficulty(index, ev.target.value),
+                    },
+                      e('option', { value: 'easy' }, 'Easy'),
+                      e('option', { value: 'medium' }, 'Medium'),
+                      e('option', { value: 'hard' }, 'Hard'),
+                      e('option', { value: 'extreme' }, 'Expert'),
+                    ),
                     e('select', {
                       className: 'vplaylist-duration-select',
                       value: item.duration,

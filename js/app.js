@@ -142,7 +142,7 @@
       });
       // Start the first exercise
       const firstItem = playlistItems[0];
-      const config = { duration: firstItem.duration };
+      const config = { duration: firstItem.duration, difficulty: firstItem.difficulty || 'medium' };
       setSelectedScenario(firstItem.id);
       setTrainingConfig(config);
       setPendingWeaponSelect({ scenarioId: firstItem.id, config: config });
@@ -177,7 +177,7 @@
       if (!activePlaylist) return;
       
       const currentItem = activePlaylist.items[activePlaylist.currentIndex];
-      const config = { duration: currentItem.duration };
+      const config = { duration: currentItem.duration, difficulty: currentItem.difficulty || 'medium' };
       setSelectedScenario(currentItem.id);
       setTrainingConfig(config);
       setPendingWeaponSelect({ scenarioId: currentItem.id, config: config });

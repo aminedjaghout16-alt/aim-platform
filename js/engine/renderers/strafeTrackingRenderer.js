@@ -48,34 +48,35 @@ VantageEngine.Renderers.StrafeTrackingRenderer = class StrafeTrackingRenderer ex
   _getDifficultyParams() {
     var diff = (this.config.difficulty || 'medium').toLowerCase();
     // Map scenario difficulty to movement parameters
+    // Rebalanced to be more trackable while maintaining progression
     var presets = {
       easy: {
-        primaryAmpX: 3.5, primaryFreqX: 0.35,
-        secondaryAmpX: 1.2, secondaryFreqX: 0.8,
+        primaryAmpX: 2.5, primaryFreqX: 0.25,
+        secondaryAmpX: 0.8, secondaryFreqX: 0.6,
         ampY: 0, freqY: 0,
-        ampZ: 0.8, freqZ: 0.25,
+        ampZ: 0.5, freqZ: 0.2,
         jitterAmp: 0, jitterFreq: 0,
       },
       medium: {
-        primaryAmpX: 5.5, primaryFreqX: 0.55,
-        secondaryAmpX: 2.2, secondaryFreqX: 1.1,
-        ampY: 0.7, freqY: 0.4,
-        ampZ: 1.2, freqZ: 0.35,
-        jitterAmp: 0.4, jitterFreq: 1.8,
+        primaryAmpX: 4.0, primaryFreqX: 0.4,
+        secondaryAmpX: 1.5, secondaryFreqX: 0.85,
+        ampY: 0.5, freqY: 0.3,
+        ampZ: 0.8, freqZ: 0.28,
+        jitterAmp: 0.25, jitterFreq: 1.4,
       },
       hard: {
-        primaryAmpX: 7.5, primaryFreqX: 0.85,
-        secondaryAmpX: 3.2, secondaryFreqX: 1.6,
-        ampY: 1.4, freqY: 0.65,
-        ampZ: 1.8, freqZ: 0.45,
-        jitterAmp: 0.9, jitterFreq: 2.8,
+        primaryAmpX: 5.5, primaryFreqX: 0.6,
+        secondaryAmpX: 2.2, secondaryFreqX: 1.2,
+        ampY: 0.9, freqY: 0.45,
+        ampZ: 1.2, freqZ: 0.35,
+        jitterAmp: 0.5, jitterFreq: 2.0,
       },
       extreme: {
-        primaryAmpX: 10, primaryFreqX: 1.15,
-        secondaryAmpX: 4.5, secondaryFreqX: 2.2,
-        ampY: 2.2, freqY: 0.9,
-        ampZ: 2.2, freqZ: 0.6,
-        jitterAmp: 1.8, jitterFreq: 3.5,
+        primaryAmpX: 7.0, primaryFreqX: 0.8,
+        secondaryAmpX: 3.0, secondaryFreqX: 1.6,
+        ampY: 1.4, freqY: 0.65,
+        ampZ: 1.6, freqZ: 0.45,
+        jitterAmp: 0.9, jitterFreq: 2.6,
       },
     };
     var p = presets[diff] || presets.medium;
