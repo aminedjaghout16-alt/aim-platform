@@ -143,27 +143,43 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
   _buildHumanoidBot(radius) {
     var group = new THREE.Group();
     
-    // Materials
+    // High-visibility cyan color scheme
+    // Main body: bright electric cyan
     var bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2d35,
-      roughness: 0.6,
-      metalness: 0.4,
+      color: 0x00d4ff,
+      emissive: 0x00d4ff,
+      emissiveIntensity: 0.4,
+      roughness: 0.3,
+      metalness: 0.6,
       transparent: true,
       opacity: 0,
     });
     
-    var accentMat = new THREE.MeshStandardMaterial({
-      color: 0xff6633,
-      emissive: 0xff6633,
+    // Head: bright white with cyan tint
+    var headMat = new THREE.MeshStandardMaterial({
+      color: 0xe0f4ff,
+      emissive: 0x00d4ff,
       emissiveIntensity: 0.3,
-      roughness: 0.4,
+      roughness: 0.25,
       metalness: 0.5,
       transparent: true,
       opacity: 0,
     });
     
+    // Armor/details: darker blue-cyan for contrast
+    var accentMat = new THREE.MeshStandardMaterial({
+      color: 0x0088aa,
+      emissive: 0x0088aa,
+      emissiveIntensity: 0.35,
+      roughness: 0.35,
+      metalness: 0.7,
+      transparent: true,
+      opacity: 0,
+    });
+    
+    // Visor: bright glowing cyan
     var visorMat = new THREE.MeshBasicMaterial({
-      color: 0x00ccff,
+      color: 0x00ffff,
       transparent: true,
       opacity: 0,
     });
@@ -171,13 +187,13 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     // Scale factor based on radius
     var scale = radius / 0.4;
 
-    // HEAD - sphere with visor
+    // HEAD - sphere (bright white with cyan tint)
     var headGeo = new THREE.SphereGeometry(0.18 * scale, 16, 16);
-    var head = new THREE.Mesh(headGeo, bodyMat);
+    var head = new THREE.Mesh(headGeo, headMat);
     head.position.y = 0.85 * scale;
     group.add(head);
 
-    // Visor - flat box across face
+    // Visor - flat box across face (bright glowing cyan)
     var visorGeo = new THREE.BoxGeometry(0.25 * scale, 0.06 * scale, 0.05 * scale);
     var visor = new THREE.Mesh(visorGeo, visorMat);
     visor.position.set(0, 0.85 * scale, -0.15 * scale);
@@ -242,7 +258,7 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     group.add(rightKnee);
 
     // Store materials for opacity animation
-    group.userData.materials = [bodyMat, accentMat, visorMat];
+    group.userData.materials = [bodyMat, headMat, accentMat, visorMat];
 
     return group;
   }
