@@ -49,6 +49,7 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     // Combat indicators
     this._combatIndicator = null;
     this._combatIndicatorTimer = null;
+    this._combatIndicatorStyle = null;
 
     // Override target radius
     var S = VantageEngine.Settings;
@@ -101,6 +102,7 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     this._target = null;
     this._botHP = this._maxBotHP;
     this._combatIndicator = null;
+    this._combatIndicatorStyle = null;
     if (this._combatIndicatorTimer) {
       clearTimeout(this._combatIndicatorTimer);
       this._combatIndicatorTimer = null;
@@ -584,6 +586,9 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
   /* ---------- Combat Indicator ---------- */
 
   _showCombatIndicator(text) {
+    // Only show emblem for kills (HEADSHOT or BODY KILL), not for BODY HIT
+    if (text === 'BODY HIT') return;
+
     // Clear any existing indicator
     if (this._combatIndicatorTimer) {
       clearTimeout(this._combatIndicatorTimer);
@@ -595,57 +600,124 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
       this._combatIndicator.parentElement.removeChild(this._combatIndicator);
     }
 
-    // Create new indicator element
+    // Create container
     var indicator = document.createElement('div');
-    indicator.className = 'bot-strafe-combat-indicator';
-    indicator.textContent = text;
+    indicator.className = 'bot-strafe-kill-emblem';
     
-    // Style based on type
-    if (text === 'HEADSHOT') {
-      indicator.style.color = '#ff0000';
-      indicator.style.fontSize = '32px';
-      indicator.style.fontWeight = 'bold';
-    } else if (text === 'BODY KILL') {
-      indicator.style.color = '#ffaa00';
-      indicator.style.fontSize = '28px';
-      indicator.style.fontWeight = 'bold';
-    } else {
-      // BODY HIT
-      indicator.style.color = '#ffffff';
-      indicator.style.fontSize = '24px';
-      indicator.style.fontWeight = 'normal';
-    }
-
-    // Position in center of canvas
+    // Determine display text and accent color
+    var displayText = text === 'HEADSHOT' ? 'HEADSHOT' : 'KILL';
+    var accentColor = text === 'HEADSHOT' ? '#ff3366' : '#00d4ff'; // Red for headshot, cyan for body kill
+    
+    // Create SVG skull emblem
+    var svgMarkup = this._createSkullEmblemSVG(accentColor);
+    
+    // Build emblem structure
+    indicator.innerHTML = 
+      '<div class="kill-emblem-icon">' + svgMarkup + '</div>' +
+      '<div class="kill-emblem-text">' + displayText + '</div>';
+    
+    // Position LOWER on screen (Valorant-style, around 72% from top)
     indicator.style.position = 'absolute';
     indicator.style.left = '50%';
-    indicator.style.top = '40%';
-    indicator.style.transform = 'translate(-50%, -50%)';
+    indicator.style.top = '72%';
+    indicator.style.transform = 'translate(-50%, -50%) scale(0.5)';
     indicator.style.pointerEvents = 'none';
-    indicator.style.textShadow = '0 0 10px rgba(0,0,0,0.8)';
     indicator.style.zIndex = '1000';
-    indicator.style.opacity = '1';
-    indicator.style.transition = 'opacity 0.3s ease-out';
-
+    indicator.style.opacity = '0';
+    indicator.style.display = 'flex';
+    indicator.style.flexDirection = 'column';
+    indicator.style.alignItems = 'center';
+    indicator.style.gap = '4px';
+    
+    // Style the icon container
+    var iconStyle = document.createElement('style');
+    iconStyle.textContent = 
+      '.bot-strafe-kill-emblem .kill-emblem-icon { ' +
+      '  width: 48px; ' +
+      '  height: 48px; ' +
+      '  filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.6)); ' +
+      '} ' +
+      '.bot-strafe-kill-emblem .kill-emblem-text { ' +
+      '  font-family: "Arial", sans-serif; ' +
+      '  font-size: 14px; ' +
+      '  font-weight: 700; ' +
+      '  letter-spacing: 2px; ' +
+      '  color: ' + accentColor + '; ' +
+      '  text-shadow: 0 0 10px rgba(0, 0, 0, 0.9), 0 0 20px ' + accentColor + '40; ' +
+      '  text-transform: uppercase; ' +
+      '}';
+    
     // Add to canvas parent
     if (this.canvas && this.canvas.parentElement) {
+      this.canvas.parentElement.appendChild(iconStyle);
       this.canvas.parentElement.appendChild(indicator);
       this._combatIndicator = indicator;
+      this._combatIndicatorStyle = iconStyle;
 
-      // Fade out and remove after 600ms
+      // Animate in: scale up + fade in
+      requestAnimationFrame(function() {
+        indicator.style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease-out';
+        indicator.style.transform = 'translate(-50%, -50%) scale(1)';
+        indicator.style.opacity = '1';
+      });
+
+      // Hold for 800ms, then fade out
       var self = this;
       this._combatIndicatorTimer = setTimeout(function () {
         if (self._combatIndicator) {
+          self._combatIndicator.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
           self._combatIndicator.style.opacity = '0';
+          self._combatIndicator.style.transform = 'translate(-50%, -50%) scale(0.9)';
           setTimeout(function () {
             if (self._combatIndicator && self._combatIndicator.parentElement) {
               self._combatIndicator.parentElement.removeChild(self._combatIndicator);
             }
+            if (self._combatIndicatorStyle && self._combatIndicatorStyle.parentElement) {
+              self._combatIndicatorStyle.parentElement.removeChild(self._combatIndicatorStyle);
+            }
             self._combatIndicator = null;
+            self._combatIndicatorStyle = null;
           }, 300);
         }
-      }, 600);
+      }, 800);
     }
+  }
+
+  /* ---------- Skull Emblem SVG ---------- */
+
+  _createSkullEmblemSVG(accentColor) {
+    // Create a circular skull/crosshair emblem inspired by FPS kill indicators
+    // White + cyan style, clean and sharp
+    return '<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+      // Outer ring
+      '<circle cx="24" cy="24" r="22" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.9"/>' +
+      // Inner ring
+      '<circle cx="24" cy="24" r="18" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.6"/>' +
+      
+      // Crosshair arms (cardinal directions)
+      '<line x1="24" y1="0" x2="24" y2="6" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
+      '<line x1="24" y1="42" x2="24" y2="48" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
+      '<line x1="0" y1="24" x2="6" y2="24" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
+      '<line x1="42" y1="24" x2="48" y2="24" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>' +
+      
+      // Accent dot at top (like the reference)
+      '<circle cx="24" cy="3" r="1.5" fill="' + accentColor + '" opacity="0.9"/>' +
+      
+      // Skull - simplified modern design
+      // Skull outline
+      '<path d="M 24 12 Q 18 12 16 16 Q 14 20 16 24 L 18 26 L 18 28 L 20 28 L 20 26 L 22 26 L 22 28 L 26 28 L 26 26 L 28 26 L 28 28 L 30 28 L 30 26 L 32 24 Q 34 20 32 16 Q 30 12 24 12 Z" ' +
+      '  fill="#ffffff" opacity="0.95"/>' +
+      
+      // Eye sockets
+      '<ellipse cx="20" cy="19" rx="2.5" ry="3" fill="#0a0a0a" opacity="0.9"/>' +
+      '<ellipse cx="28" cy="19" rx="2.5" ry="3" fill="#0a0a0a" opacity="0.9"/>' +
+      
+      // Nose
+      '<path d="M 24 22 L 23 24 L 25 24 Z" fill="#0a0a0a" opacity="0.8"/>' +
+      
+      // Subtle glow effect
+      '<circle cx="24" cy="24" r="23" fill="none" stroke="' + accentColor + '" stroke-width="0.5" opacity="0.3"/>' +
+    '</svg>';
   }
 
   /* ---------- Override: update loop ---------- */
