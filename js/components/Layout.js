@@ -10,6 +10,7 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
     { id: 'dashboard', label: 'Dashboard', icon: '⬡' },
     { id: 'training', label: 'Training', icon: '◎' },
     { id: 'stats', label: 'Statistics', icon: '◈' },
+    { id: 'leaderboard', label: 'Leaderboard', icon: '△' },
     { id: 'profile', label: 'Profile', icon: '◇' },
     { id: 'settings', label: 'Settings', icon: '⚙' },
   ];

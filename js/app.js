@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -126,6 +126,21 @@
 
       const saved = await DB.saveTrainingResult(uid, { ...result, userId: uid });
       setLatestResultId(saved.id);
+
+      // Submit to leaderboard (fire-and-forget, don't block the UI)
+      try {
+        await DB.submitLeaderboardEntry(uid, {
+          scenarioId: result.scenarioId,
+          score: result.score,
+          accuracy: result.stats ? result.stats.accuracy : 0,
+          grade: result.grade,
+          weaponId: result.config ? result.config.weaponId : null,
+          displayName: user.displayName || 'Operator',
+        });
+      } catch (err) {
+        console.warn('Could not submit leaderboard entry:', err);
+      }
+
       return { previousBest, isPersonalBest: previousBest === null || result.score > previousBest };
     }, [user]);
 
@@ -261,6 +276,8 @@
           return e(VantagePages.Profile, { user: user, onNavigate: navigate, onLogout: handleLogout });
         case 'settings':
           return e(VantagePages.Settings, { onNavigate: navigate, user: user, onLogout: handleLogout });
+        case 'leaderboard':
+          return e(VantagePages.Leaderboard, { onNavigate: navigate, user: user });
         default:
           return e(VantagePages.Dashboard, { onNavigate: navigate, user: user });
       }

@@ -275,4 +275,103 @@ VantageServices.DatabaseService = {
       localStorage.setItem('vantage.playlists', JSON.stringify(playlists));
     } catch (err) {}
   },
+
+  // ─── Leaderboards ──────────────────────────────────────
+
+  // Submit or update a leaderboard entry for a scenario.
+  // Only writes if the new score beats the existing best for this user.
+  async submitLeaderboardEntry(userId, entry) {
+    var db = this._db();
+    var scenarioId = entry.scenarioId;
+    if (!scenarioId) throw new Error('scenarioId is required');
+
+    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    var userEntryRef = entriesCol.doc(userId);
+
+    // Use a transaction to ensure we only overwrite if the new score is higher
+    return db.runTransaction(async function (transaction) {
+      var existingDoc = await transaction.get(userEntryRef);
+      var existingScore = existingDoc.exists ? (existingDoc.data().score || 0) : -1;
+
+      if (existingDoc.exists && entry.score <= existingScore) {
+        // Current score is not better — skip the write
+        return { updated: false, reason: 'score_not_better' };
+      }
+
+      var docData = {
+        userId: userId,
+        displayName: entry.displayName || 'Operator',
+        score: entry.score || 0,
+        accuracy: entry.accuracy || 0,
+        scenarioId: scenarioId,
+        weaponId: entry.weaponId || null,
+        grade: entry.grade || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      transaction.set(userEntryRef, docData);
+      return { updated: true, entry: docData };
+    });
+  },
+
+  // Get top N entries for a scenario, ordered by score descending
+  async getLeaderboardTop(scenarioId, limit, timeRange) {
+    var db = this._db();
+    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+
+    var query = entriesCol.orderBy('score', 'desc');
+
+    // Apply time filter if specified
+    if (timeRange === 'week') {
+      var weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      // Note: createdAt is a server timestamp, so we filter client-side after fetch
+      // Firestore doesn't allow filtering on serverTimestamp directly in queries
+    }
+
+    query = query.limit(limit || 50);
+    var snap = await query.get();
+
+    var entries = [];
+    snap.forEach(function (doc) {
+      var data = doc.data();
+      // Client-side time filter for "this week"
+      if (timeRange === 'week' && data.createdAt) {
+        var entryDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+        var weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        if (entryDate < weekAgo) return;
+      }
+      entries.push({ id: doc.id, ...data });
+    });
+
+    return entries;
+  },
+
+  // Get a specific user's entry for a scenario
+  async getUserLeaderboardEntry(userId, scenarioId) {
+    var db = this._db();
+    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    var doc = await entriesCol.doc(userId).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
+  },
+
+  // Get the rank of a user in a scenario (1-indexed)
+  async getUserLeaderboardRank(userId, scenarioId) {
+    var db = this._db();
+    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+
+    // First get the user's score
+    var userDoc = await entriesCol.doc(userId).get();
+    if (!userDoc.exists) return null;
+    var userScore = userDoc.data().score || 0;
+
+    // Count how many entries have a higher score
+    var betterSnap = await entriesCol
+      .where('score', '>', userScore)
+      .get();
+
+    return betterSnap.size + 1;
+  },
 };

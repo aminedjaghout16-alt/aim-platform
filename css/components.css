@@ -3083,3 +3083,321 @@
     opacity: 1;
   }
 }
+
+/* ============================================
+   Leaderboard Styles
+   ============================================ */
+
+.vpage-leaderboard {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.vleaderboard-filters {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.vfilter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vfilter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vfilter-select {
+  padding: 10px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  min-width: 200px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.vfilter-select:hover {
+  border-color: var(--accent-primary);
+}
+
+.vfilter-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0, 224, 208, 0.1);
+}
+
+.vfilter-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-base);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.vfilter-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vfilter-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.vfilter-tab-active {
+  background: var(--accent-primary);
+  color: var(--bg-base);
+}
+
+.vfilter-tab-active:hover {
+  background: var(--accent-primary);
+  color: var(--bg-base);
+}
+
+.vleaderboard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 64px 24px;
+  color: var(--text-secondary);
+}
+
+.vleaderboard-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: vleaderboard-spin 0.8s linear infinite;
+}
+
+@keyframes vleaderboard-spin {
+  to { transform: rotate(360deg); }
+}
+
+.vleaderboard-table-card {
+  overflow: hidden;
+}
+
+.vleaderboard-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.vleaderboard-table-header {
+  display: grid;
+  grid-template-columns: 80px 1fr 120px 100px 80px 120px;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vleaderboard-table-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 120px 100px 80px 120px;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: center;
+  transition: background var(--transition-fast);
+}
+
+.vleaderboard-table-row:hover {
+  background: var(--bg-elevated);
+}
+
+.vleaderboard-table-row:last-child {
+  border-bottom: none;
+}
+
+.vleaderboard-row-highlight {
+  background: rgba(0, 224, 208, 0.08);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.vleaderboard-row-highlight:hover {
+  background: rgba(0, 224, 208, 0.12);
+}
+
+.vleaderboard-row-top3 {
+  background: rgba(255, 184, 48, 0.04);
+}
+
+.vleaderboard-row-top3:hover {
+  background: rgba(255, 184, 48, 0.08);
+}
+
+.vleaderboard-col-rank {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.vleaderboard-rank {
+  font-size: 1.1rem;
+}
+
+.vleaderboard-medal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.vleaderboard-medal-1 {
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #1a1a2e;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+.vleaderboard-medal-2 {
+  background: linear-gradient(135deg, #c0c0c0, #e0e0e0);
+  color: #1a1a2e;
+  box-shadow: 0 2px 8px rgba(192, 192, 192, 0.3);
+}
+
+.vleaderboard-medal-3 {
+  background: linear-gradient(135deg, #cd7f32, #e8a87c);
+  color: #1a1a2e;
+  box-shadow: 0 2px 8px rgba(205, 127, 50, 0.3);
+}
+
+.vleaderboard-col-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vleaderboard-player-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vleaderboard-you-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: var(--accent-primary);
+  color: var(--bg-base);
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vleaderboard-col-score {
+  font-weight: 700;
+  color: var(--accent-primary);
+  font-size: 1.05rem;
+}
+
+.vleaderboard-col-accuracy {
+  color: var(--text-secondary);
+}
+
+.vleaderboard-col-grade {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.vleaderboard-col-date {
+  font-size: 0.85rem;
+}
+
+.vleaderboard-your-rank {
+  margin-top: 24px;
+}
+
+.vleaderboard-your-rank-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 0;
+}
+
+.vleaderboard-your-rank-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vleaderboard-your-rank-number {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.vleaderboard-your-rank-score,
+.vleaderboard-your-rank-accuracy {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .vleaderboard-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vfilter-select {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .vleaderboard-table-header,
+  .vleaderboard-table-row {
+    grid-template-columns: 60px 1fr 80px 70px 60px 90px;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+  }
+
+  .vleaderboard-col-date {
+    display: none;
+  }
+
+  .vleaderboard-table-header {
+    grid-template-columns: 60px 1fr 80px 70px 60px;
+  }
+
+  .vleaderboard-your-rank-content {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
