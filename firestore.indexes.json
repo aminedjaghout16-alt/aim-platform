@@ -7,14 +7,16 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "entries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "score", "order": "DESCENDING" }
-      ]
     }
+  ],
+  "fieldOverrides": []
+}
+  ],
+  "fieldOverrides": []
+}
+  ],
+  "fieldOverrides": []
+}
   ],
   "fieldOverrides": []
 }
