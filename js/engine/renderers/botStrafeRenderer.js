@@ -119,49 +119,14 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
 
     var radius = this.targetBaseRadius;
 
-    // Target sphere (human-like, slightly taller)
-    var targetGeo = new THREE.SphereGeometry(radius, 24, 24);
-    var targetMat = new THREE.MeshStandardMaterial({
-      color: this._targetColor,
-      emissive: this._targetColor,
-      emissiveIntensity: 0.6,
-      roughness: 0.25,
-      metalness: 0.6,
-      transparent: true,
-      opacity: 0,
-    });
-    var targetMesh = new THREE.Mesh(targetGeo, targetMat);
-    targetMesh.position.set(x, y, z);
+    // Build humanoid bot target
+    var botGroup = this._buildHumanoidBot(radius);
+    botGroup.position.set(x, y, z);
 
-    // Inner core
-    var coreGeo = new THREE.SphereGeometry(radius * 0.4, 16, 16);
-    var coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
-    var core = new THREE.Mesh(coreGeo, coreMat);
-    targetMesh.add(core);
-
-    // Outer ring
-    var ringGeo = new THREE.RingGeometry(radius * 1.3, radius * 1.7, 48);
-    var ringMat = new THREE.MeshBasicMaterial({
-      color: this._targetColor, transparent: true, opacity: 0, side: THREE.DoubleSide,
-    });
-    var ring = new THREE.Mesh(ringGeo, ringMat);
-    targetMesh.add(ring);
-
-    // Inner ring
-    var innerRingGeo = new THREE.RingGeometry(radius * 0.7, radius * 0.85, 48);
-    var innerRingMat = new THREE.MeshBasicMaterial({
-      color: this._targetColor, transparent: true, opacity: 0, side: THREE.DoubleSide,
-    });
-    var innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
-    targetMesh.add(innerRing);
-
-    this._scene.add(targetMesh);
+    this._scene.add(botGroup);
 
     this._target = {
-      mesh: targetMesh,
-      core: core,
-      ring: ring,
-      innerRing: innerRing,
+      mesh: botGroup,
       radius: radius,
       spawnTime: this._targetSpawnTime,
       spawnPos: { x: x, y: y, z: z },
@@ -171,6 +136,115 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     };
 
     this._targets.push(this._target);
+  }
+
+  /* ---------- Build Humanoid Bot ---------- */
+
+  _buildHumanoidBot(radius) {
+    var group = new THREE.Group();
+    
+    // Materials
+    var bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x2a2d35,
+      roughness: 0.6,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0,
+    });
+    
+    var accentMat = new THREE.MeshStandardMaterial({
+      color: 0xff6633,
+      emissive: 0xff6633,
+      emissiveIntensity: 0.3,
+      roughness: 0.4,
+      metalness: 0.5,
+      transparent: true,
+      opacity: 0,
+    });
+    
+    var visorMat = new THREE.MeshBasicMaterial({
+      color: 0x00ccff,
+      transparent: true,
+      opacity: 0,
+    });
+
+    // Scale factor based on radius
+    var scale = radius / 0.4;
+
+    // HEAD - sphere with visor
+    var headGeo = new THREE.SphereGeometry(0.18 * scale, 16, 16);
+    var head = new THREE.Mesh(headGeo, bodyMat);
+    head.position.y = 0.85 * scale;
+    group.add(head);
+
+    // Visor - flat box across face
+    var visorGeo = new THREE.BoxGeometry(0.25 * scale, 0.06 * scale, 0.05 * scale);
+    var visor = new THREE.Mesh(visorGeo, visorMat);
+    visor.position.set(0, 0.85 * scale, -0.15 * scale);
+    group.add(visor);
+
+    // TORSO - box
+    var torsoGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.25 * scale);
+    var torso = new THREE.Mesh(torsoGeo, bodyMat);
+    torso.position.y = 0.45 * scale;
+    group.add(torso);
+
+    // Chest accent - orange stripe
+    var chestAccentGeo = new THREE.BoxGeometry(0.42 * scale, 0.08 * scale, 0.26 * scale);
+    var chestAccent = new THREE.Mesh(chestAccentGeo, accentMat);
+    chestAccent.position.y = 0.55 * scale;
+    group.add(chestAccent);
+
+    // SHOULDERS - two spheres
+    var shoulderGeo = new THREE.SphereGeometry(0.1 * scale, 12, 12);
+    var leftShoulder = new THREE.Mesh(shoulderGeo, accentMat);
+    leftShoulder.position.set(-0.25 * scale, 0.65 * scale, 0);
+    group.add(leftShoulder);
+
+    var rightShoulder = new THREE.Mesh(shoulderGeo, accentMat);
+    rightShoulder.position.set(0.25 * scale, 0.65 * scale, 0);
+    group.add(rightShoulder);
+
+    // ARMS - cylinders
+    var armGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 0.4 * scale, 8);
+    var leftArm = new THREE.Mesh(armGeo, bodyMat);
+    leftArm.position.set(-0.28 * scale, 0.4 * scale, 0);
+    group.add(leftArm);
+
+    var rightArm = new THREE.Mesh(armGeo, bodyMat);
+    rightArm.position.set(0.28 * scale, 0.4 * scale, 0);
+    group.add(rightArm);
+
+    // HIPS - box
+    var hipsGeo = new THREE.BoxGeometry(0.35 * scale, 0.15 * scale, 0.22 * scale);
+    var hips = new THREE.Mesh(hipsGeo, bodyMat);
+    hips.position.y = 0.15 * scale;
+    group.add(hips);
+
+    // LEGS - cylinders
+    var legGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.5 * scale, 8);
+    var leftLeg = new THREE.Mesh(legGeo, bodyMat);
+    leftLeg.position.set(-0.12 * scale, -0.2 * scale, 0);
+    group.add(leftLeg);
+
+    var rightLeg = new THREE.Mesh(legGeo, bodyMat);
+    rightLeg.position.set(0.12 * scale, -0.2 * scale, 0);
+    group.add(rightLeg);
+
+    // KNEE accents - orange circles
+    var kneeGeo = new THREE.SphereGeometry(0.05 * scale, 8, 8);
+    var leftKnee = new THREE.Mesh(kneeGeo, accentMat);
+    leftKnee.position.set(-0.12 * scale, -0.05 * scale, 0.08 * scale);
+    group.add(leftKnee);
+
+    var rightKnee = new THREE.Mesh(kneeGeo, accentMat);
+    rightKnee.position.set(0.12 * scale, -0.05 * scale, 0.08 * scale);
+    group.add(rightKnee);
+
+    // Store materials for opacity animation
+    group.userData.materials = [bodyMat, accentMat, visorMat];
+
+    return group;
   }
 
   _clearTarget() {
@@ -360,8 +434,15 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
     this._applyShotSpread();
 
-    var meshes = [this._target.mesh];
-    var intersects = this._raycaster.intersectObjects(meshes, false);
+    // Collect all meshes from the bot group for raycasting
+    var botMeshes = [];
+    this._target.mesh.traverse(function (child) {
+      if (child.isMesh) {
+        botMeshes.push(child);
+      }
+    });
+
+    var intersects = this._raycaster.intersectObjects(botMeshes, false);
 
     // Tracer and recoil
     this._spawnTracer(intersects.length > 0 ? intersects[0].point : null);
@@ -370,11 +451,18 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     var hit = false;
     if (intersects.length > 0) {
       var hitObj = intersects[0].object;
-      while (hitObj.parent && hitObj.parent !== this._scene) {
-        hitObj = hitObj.parent;
+      // Check if the hit object is part of our bot group
+      var isPartOfBot = false;
+      var current = hitObj;
+      while (current) {
+        if (current === this._target.mesh) {
+          isPartOfBot = true;
+          break;
+        }
+        current = current.parent;
       }
 
-      if (hitObj === this._target.mesh && this._target.alive) {
+      if (isPartOfBot && this._target.alive) {
         this._target.alive = false;
         this._target.hitAnim = 1.0;
         this._hitCount++;
@@ -424,25 +512,27 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
     if (this._target && this._target.alive) {
       var t = this._target;
 
-      // Fade in
+      // Fade in - update all materials in the bot group
       t.opacity = Math.min(1, t.opacity + dt * 8);
       var easedOpacity = t.opacity < 1 ? 1 - Math.pow(1 - t.opacity, 3) : 1;
-      t.mesh.material.opacity = easedOpacity;
-      t.core.material.opacity = easedOpacity * 0.9;
-      t.ring.material.opacity = easedOpacity * 0.7;
-      if (t.innerRing) t.innerRing.material.opacity = easedOpacity * 0.5;
-
-      // Billboard rings
-      if (this._camera) {
-        var camPos = this._camera.position.clone();
-        var localCamPos = t.mesh.worldToLocal(camPos);
-        t.ring.lookAt(localCamPos);
-        if (t.innerRing) t.innerRing.lookAt(localCamPos);
+      
+      // Update all materials stored in the group
+      if (t.mesh.userData.materials) {
+        for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+          t.mesh.userData.materials[i].opacity = easedOpacity;
+        }
       }
 
-      // Pulse effect
-      var pulse = 0.5 + Math.sin(now * 0.005) * 0.1;
-      t.mesh.material.emissiveIntensity = pulse;
+      // Make bot face the camera (billboard on Y axis only)
+      if (this._camera) {
+        var camPos = this._camera.position.clone();
+        var botPos = t.mesh.position.clone();
+        // Only rotate around Y axis to keep bot upright
+        var direction = new THREE.Vector3().subVectors(camPos, botPos);
+        direction.y = 0; // Keep upright
+        var angle = Math.atan2(direction.x, direction.z);
+        t.mesh.rotation.y = angle;
+      }
     } else if (this._target && !this._target.alive) {
       // Hit animation
       var t = this._target;
@@ -451,27 +541,41 @@ VantageEngine.Renderers.BotStrafeRenderer = class BotStrafeRenderer extends Vant
         // Will be cleared by timeout
       } else {
         if (t.hitAnim > 0.8) {
+          // Initial flash - scale up and brighten
           var flash = (1 - t.hitAnim) / 0.2;
           t.mesh.scale.setScalar(1 + flash * 0.4);
-          t.mesh.material.emissiveIntensity = 0.6 + flash * 3;
-          t.mesh.material.color.setHex(0xffffff);
-          t.core.material.opacity = 1;
+          // Flash all materials white
+          if (t.mesh.userData.materials) {
+            for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+              var mat = t.mesh.userData.materials[i];
+              if (mat.emissive) {
+                mat.emissiveIntensity = 0.3 + flash * 3;
+              }
+              mat.opacity = 1;
+            }
+          }
         } else if (t.hitAnim > 0.5) {
+          // Transition phase - start shrinking
           var transition = (0.8 - t.hitAnim) / 0.3;
           t.mesh.scale.setScalar(1.4 - transition * 0.3);
-          t.mesh.material.emissiveIntensity = 3 - transition * 2;
-          var colorLerp = transition;
-          t.mesh.material.color.setHex(0xffffff).lerp(new THREE.Color(this._targetColor), colorLerp);
+          if (t.mesh.userData.materials) {
+            for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+              var mat = t.mesh.userData.materials[i];
+              if (mat.emissive) {
+                mat.emissiveIntensity = 3 - transition * 2;
+              }
+            }
+          }
         } else {
+          // Final shrink and fade out
           var shrink = t.hitAnim / 0.5;
           t.mesh.scale.setScalar(shrink * 1.1);
-          t.mesh.material.opacity = shrink * 0.6;
-          t.mesh.material.emissiveIntensity = shrink;
-          t.mesh.material.color.set(this._targetColor);
+          if (t.mesh.userData.materials) {
+            for (var i = 0; i < t.mesh.userData.materials.length; i++) {
+              t.mesh.userData.materials[i].opacity = shrink * 0.6;
+            }
+          }
         }
-        t.core.material.opacity = t.hitAnim * 0.5;
-        t.ring.material.opacity = t.hitAnim * 0.5;
-        if (t.innerRing) t.innerRing.material.opacity = t.hitAnim * 0.35;
       }
     }
 
