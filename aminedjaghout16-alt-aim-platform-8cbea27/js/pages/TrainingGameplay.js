@@ -12,7 +12,6 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const engineRef = useRef(null);
   const saveRef = useRef(onSaveResult);
   saveRef.current = onSaveResult;
-  const playlistCallbackFiredRef = useRef(false); // Prevent duplicate playlist completion calls
 
   const [attempt, setAttempt] = useState(0);
   const [engineState, setEngineState] = useState('idle');
@@ -59,7 +58,6 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     setCountdownNum(null);
     setLockError(false);
     setEngineState('idle');
-    playlistCallbackFiredRef.current = false; // Reset for new exercise
 
     if (typeof THREE === 'undefined') {
       setError('The 3D engine could not be loaded. Check your internet connection and reload the page.');
@@ -216,8 +214,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         .then((info) => {
           setSaveInfo(info || null);
           // If in playlist mode, notify the parent instead of showing results
-          if (activePlaylist && onPlaylistExerciseComplete && !playlistCallbackFiredRef.current) {
-            playlistCallbackFiredRef.current = true; // Mark as fired to prevent duplicates
+          if (activePlaylist && onPlaylistExerciseComplete) {
             setTimeout(() => {
               onPlaylistExerciseComplete(res);
             }, 1500); // Brief delay to show the results screen

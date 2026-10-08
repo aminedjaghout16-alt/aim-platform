@@ -151,19 +151,26 @@
 
     const handlePlaylistExerciseComplete = useCallback((result) => {
       if (!activePlaylist) return;
-      // Guard: if already past the end, ignore duplicate calls
-      if (activePlaylist.currentIndex >= activePlaylist.items.length) return;
       
       const newResults = [...activePlaylist.results, result];
       const nextIndex = activePlaylist.currentIndex + 1;
       
-      // Always advance currentIndex — PlaylistPage uses it to detect completion
-      setActivePlaylist({
-        ...activePlaylist,
-        currentIndex: nextIndex,
-        results: newResults,
-      });
-      navigate('playlist');
+      if (nextIndex >= activePlaylist.items.length) {
+        // Playlist complete - show summary
+        setActivePlaylist({
+          ...activePlaylist,
+          results: newResults,
+        });
+        navigate('playlist');
+      } else {
+        // Show transition then start next exercise
+        setActivePlaylist({
+          ...activePlaylist,
+          currentIndex: nextIndex,
+          results: newResults,
+        });
+        navigate('playlist');
+      }
     }, [activePlaylist, navigate]);
 
     const handleStartNextPlaylistExercise = useCallback(() => {
