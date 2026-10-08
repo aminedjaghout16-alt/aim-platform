@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -23,6 +23,7 @@
     const [trainingConfig, setTrainingConfig] = useState(null);
     const [latestResultId, setLatestResultId] = useState(null);
     const [pendingWeaponSelect, setPendingWeaponSelect] = useState(null); // { scenarioId, config }
+    const [activePlaylist, setActivePlaylist] = useState(null); // { items: [...], currentIndex: 0, results: [] }
 
     // Auth listener — persistent sessions via Firebase
     useEffect(() => {
@@ -132,6 +133,62 @@
       navigate('results');
     }, [navigate]);
 
+    // Playlist handlers
+    const handleCreatePlaylist = useCallback((playlistItems) => {
+      setActivePlaylist({
+        items: playlistItems,
+        currentIndex: 0,
+        results: [],
+      });
+      // Start the first exercise
+      const firstItem = playlistItems[0];
+      const config = { duration: firstItem.duration };
+      setSelectedScenario(firstItem.id);
+      setTrainingConfig(config);
+      setPendingWeaponSelect({ scenarioId: firstItem.id, config: config });
+      navigate('weaponselect', firstItem.id);
+    }, [navigate]);
+
+    const handlePlaylistExerciseComplete = useCallback((result) => {
+      if (!activePlaylist) return;
+      
+      const newResults = [...activePlaylist.results, result];
+      const nextIndex = activePlaylist.currentIndex + 1;
+      
+      if (nextIndex >= activePlaylist.items.length) {
+        // Playlist complete - show summary
+        setActivePlaylist({
+          ...activePlaylist,
+          results: newResults,
+        });
+        navigate('playlist');
+      } else {
+        // Show transition then start next exercise
+        setActivePlaylist({
+          ...activePlaylist,
+          currentIndex: nextIndex,
+          results: newResults,
+        });
+        navigate('playlist');
+      }
+    }, [activePlaylist, navigate]);
+
+    const handleStartNextPlaylistExercise = useCallback(() => {
+      if (!activePlaylist) return;
+      
+      const currentItem = activePlaylist.items[activePlaylist.currentIndex];
+      const config = { duration: currentItem.duration };
+      setSelectedScenario(currentItem.id);
+      setTrainingConfig(config);
+      setPendingWeaponSelect({ scenarioId: currentItem.id, config: config });
+      navigate('weaponselect', currentItem.id);
+    }, [activePlaylist, navigate]);
+
+    const handleExitPlaylist = useCallback(() => {
+      setActivePlaylist(null);
+      navigate('training');
+    }, [navigate]);
+
     // Show loading screen while checking auth state
     if (authLoading || page === null) {
       return e('div', { className: 'vlanding' },
@@ -163,6 +220,7 @@
             onNavigate: navigate,
             onSelectScenario: handleSelectScenario,
             onQuickStart: handleQuickStart,
+            onCreatePlaylist: handleCreatePlaylist,
           });
         case 'details':
           return e(VantagePages.TrainingDetails, {
@@ -191,9 +249,18 @@
             onNavigate: navigate,
             onFinish: handleFinishTraining,
             onSaveResult: handleSaveResult,
+            activePlaylist: activePlaylist,
+            onPlaylistExerciseComplete: handlePlaylistExerciseComplete,
           });
         case 'results':
           return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, onQuickStart: handleQuickStart });
+        case 'playlist':
+          return e(VantagePages.PlaylistPage, { 
+            activePlaylist: activePlaylist,
+            onStartNext: handleStartNextPlaylistExercise,
+            onExit: handleExitPlaylist,
+            onNavigate: navigate,
+          });
         case 'stats':
           return e(VantagePages.Statistics, { onNavigate: navigate, user: user });
         case 'profile':

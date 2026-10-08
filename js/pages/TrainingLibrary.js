@@ -3,12 +3,13 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario, onQuickStart }) {
+VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectScenario, onQuickStart, onCreatePlaylist }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterDifficulty, setFilterDifficulty] = useState('all');
   const [filterGame, setFilterGame] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [showPlaylistCreator, setShowPlaylistCreator] = useState(false);
 
   const categories = VantageEngine.Categories.getAll();
   const allScenarios = VantageEngine.Scenarios.getEnabled();
@@ -76,6 +77,19 @@ VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectSc
     e(VantageUI.PageHeader, {
       title: 'Training Library',
       subtitle: `${filtered.length} scenario${filtered.length !== 1 ? 's' : ''} available`,
+      action: e(VantageUI.Button, { 
+        variant: 'accent', 
+        onClick: () => setShowPlaylistCreator(true) 
+      }, 'CREATE PLAYLIST'),
+    }),
+
+    showPlaylistCreator && e(VantageComponents.PlaylistCreator, {
+      onNavigate: onNavigate,
+      onStartPlaylist: (playlist) => {
+        setShowPlaylistCreator(false);
+        if (onCreatePlaylist) onCreatePlaylist(playlist);
+      },
+      onClose: () => setShowPlaylistCreator(false),
     }),
 
     // Search & Filters Bar

@@ -7,7 +7,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult }) {
+VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const saveRef = useRef(onSaveResult);
@@ -211,7 +211,15 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       setResult(res);
       // Save the real result immediately so it is never lost
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
-        .then((info) => setSaveInfo(info || null))
+        .then((info) => {
+          setSaveInfo(info || null);
+          // If in playlist mode, notify the parent instead of showing results
+          if (activePlaylist && onPlaylistExerciseComplete) {
+            setTimeout(() => {
+              onPlaylistExerciseComplete(res);
+            }, 1500); // Brief delay to show the results screen
+          }
+        })
         .catch((err) => console.error('[Gameplay] Failed to save result', err));
     });
 
