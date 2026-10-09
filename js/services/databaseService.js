@@ -278,38 +278,76 @@ VantageServices.DatabaseService = {
 
   // ─── Leaderboards ──────────────────────────────────────
 
+  // Get ISO week ID for a date (format: "2026-W41")
+  _getWeekId(date) {
+    var d = date || new Date();
+    // Get ISO week number
+    var target = new Date(d.valueOf());
+    var dayNr = (d.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
+    var firstThursday = target.valueOf();
+    target.setMonth(0, 1);
+    if (target.getDay() !== 4) {
+      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+    }
+    var weekNumber = 1 + Math.ceil((firstThursday - target) / 604800000);
+    var year = d.getFullYear();
+    // Handle year boundary for week 1
+    if (weekNumber > 52) {
+      year++;
+      weekNumber = 1;
+    }
+    return year + '-W' + (weekNumber < 10 ? '0' : '') + weekNumber;
+  },
+
   // Submit or update a leaderboard entry for a scenario.
-  // Only writes if the new score beats the existing best for this user.
+  // Writes to both all-time and current week's bucket.
   async submitLeaderboardEntry(userId, entry) {
     var db = this._db();
     var scenarioId = entry.scenarioId;
     if (!scenarioId) throw new Error('scenarioId is required');
 
-    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
-    var userEntryRef = entriesCol.doc(userId);
+    var weekId = this._getWeekId();
+    var allTimeRef = db.collection('leaderboards').doc(scenarioId).collection('entries').doc(userId);
+    var weeklyRef = db.collection('leaderboards').doc(scenarioId).collection('weeks').doc(weekId).collection('entries').doc(userId);
+
+    var docData = {
+      userId: userId,
+      displayName: entry.displayName || 'Operator',
+      score: entry.score || 0,
+      accuracy: entry.accuracy || 0,
+      scenarioId: scenarioId,
+      weaponId: entry.weaponId || null,
+      grade: entry.grade || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
 
     // Use a transaction to ensure we only overwrite if the new score is higher
     return db.runTransaction(async function (transaction) {
-      var existingDoc = await transaction.get(userEntryRef);
-      var existingScore = existingDoc.exists ? (existingDoc.data().score || 0) : -1;
+      // Check all-time entry
+      var allTimeDoc = await transaction.get(allTimeRef);
+      var allTimeScore = allTimeDoc.exists ? (allTimeDoc.data().score || 0) : -1;
 
-      if (existingDoc.exists && entry.score <= existingScore) {
-        // Current score is not better — skip the write
+      // Check weekly entry
+      var weeklyDoc = await transaction.get(weeklyRef);
+      var weeklyScore = weeklyDoc.exists ? (weeklyDoc.data().score || 0) : -1;
+
+      // Only write if the new score beats at least one of them
+      if (allTimeDoc.exists && entry.score <= allTimeScore &&
+          weeklyDoc.exists && entry.score <= weeklyScore) {
         return { updated: false, reason: 'score_not_better' };
       }
 
-      var docData = {
-        userId: userId,
-        displayName: entry.displayName || 'Operator',
-        score: entry.score || 0,
-        accuracy: entry.accuracy || 0,
-        scenarioId: scenarioId,
-        weaponId: entry.weaponId || null,
-        grade: entry.grade || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      };
+      // Write to all-time if it's a new best
+      if (!allTimeDoc.exists || entry.score > allTimeScore) {
+        transaction.set(allTimeRef, docData);
+      }
 
-      transaction.set(userEntryRef, docData);
+      // Write to weekly if it's a new best for this week
+      if (!weeklyDoc.exists || entry.score > weeklyScore) {
+        transaction.set(weeklyRef, docData);
+      }
+
       return { updated: true, entry: docData };
     });
   },
@@ -317,50 +355,59 @@ VantageServices.DatabaseService = {
   // Get top N entries for a scenario, ordered by score descending
   async getLeaderboardTop(scenarioId, limit, timeRange) {
     var db = this._db();
-    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    var entriesCol;
 
-    var query = entriesCol.orderBy('score', 'desc');
-
-    // Apply time filter if specified
     if (timeRange === 'week') {
-      var weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      // Note: createdAt is a server timestamp, so we filter client-side after fetch
-      // Firestore doesn't allow filtering on serverTimestamp directly in queries
+      // Query the current week's bucket
+      var weekId = this._getWeekId();
+      entriesCol = db.collection('leaderboards').doc(scenarioId)
+        .collection('weeks').doc(weekId).collection('entries');
+    } else {
+      // Query all-time
+      entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
     }
 
-    query = query.limit(limit || 50);
+    var query = entriesCol.orderBy('score', 'desc').limit(limit || 50);
     var snap = await query.get();
 
     var entries = [];
     snap.forEach(function (doc) {
-      var data = doc.data();
-      // Client-side time filter for "this week"
-      if (timeRange === 'week' && data.createdAt) {
-        var entryDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-        var weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        if (entryDate < weekAgo) return;
-      }
-      entries.push({ id: doc.id, ...data });
+      entries.push({ id: doc.id, ...doc.data() });
     });
 
     return entries;
   },
 
   // Get a specific user's entry for a scenario
-  async getUserLeaderboardEntry(userId, scenarioId) {
+  async getUserLeaderboardEntry(userId, scenarioId, timeRange) {
     var db = this._db();
-    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    var entriesCol;
+
+    if (timeRange === 'week') {
+      var weekId = this._getWeekId();
+      entriesCol = db.collection('leaderboards').doc(scenarioId)
+        .collection('weeks').doc(weekId).collection('entries');
+    } else {
+      entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    }
+
     var doc = await entriesCol.doc(userId).get();
     if (!doc.exists) return null;
     return { id: doc.id, ...doc.data() };
   },
 
   // Get the rank of a user in a scenario (1-indexed)
-  async getUserLeaderboardRank(userId, scenarioId) {
+  async getUserLeaderboardRank(userId, scenarioId, timeRange) {
     var db = this._db();
-    var entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    var entriesCol;
+
+    if (timeRange === 'week') {
+      var weekId = this._getWeekId();
+      entriesCol = db.collection('leaderboards').doc(scenarioId)
+        .collection('weeks').doc(weekId).collection('entries');
+    } else {
+      entriesCol = db.collection('leaderboards').doc(scenarioId).collection('entries');
+    }
 
     // First get the user's score
     var userDoc = await entriesCol.doc(userId).get();

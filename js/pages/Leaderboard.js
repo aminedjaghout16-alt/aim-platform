@@ -29,8 +29,8 @@ VantagePages.Leaderboard = function Leaderboard({ onNavigate, user }) {
 
     Promise.all([
       DB.getLeaderboardTop(selectedScenario, 50, timeRange),
-      DB.getUserLeaderboardEntry(uid, selectedScenario),
-      DB.getUserLeaderboardRank(uid, selectedScenario),
+      DB.getUserLeaderboardEntry(uid, selectedScenario, timeRange),
+      DB.getUserLeaderboardRank(uid, selectedScenario, timeRange),
     ]).then(function (results) {
       if (cancelled) return;
       setEntries(results[0] || []);
@@ -118,7 +118,11 @@ VantagePages.Leaderboard = function Leaderboard({ onNavigate, user }) {
         description: error,
         action: e(VantageUI.Button, {
           variant: 'secondary',
-          onClick: function () { setSelectedScenario(selectedScenario); }, // Trigger reload
+          onClick: function () {
+            // Reset state to trigger reload via useEffect
+            setError(null);
+            setEntries(null);
+          },
         }, 'RETRY'),
       }),
     );

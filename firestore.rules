@@ -15,10 +15,32 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Validate that displayName matches the user's profile
+    function displayNameMatches(userId) {
+      return request.resource.data.displayName == 
+        get(/databases/$(database)/documents/users/$(userId)).data.displayName;
+    }
+
+    // Validate leaderboard entry fields (exact set allowed)
+    function validLeaderboardEntryFields() {
+      return request.resource.data.keys().hasOnly([
+        'userId', 'displayName', 'score', 'accuracy', 'scenarioId', 
+        'weaponId', 'grade', 'createdAt'
+      ]);
+    }
+
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      
+      // Create: owner only, role must be absent or 'user'
+      allow create: if isOwner(userId) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      
+      // Update: owner only, role cannot be changed (must remain the same or be absent in both)
+      allow update: if isOwner(userId) &&
+        (resource.data.role == request.resource.data.role ||
+         (!('role' in resource.data) && !('role' in request.resource.data)));
+      
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -39,23 +61,24 @@ service cloud.firestore {
     }
 
     // ─── Leaderboards ──────────────────────────────────────
-    // Structure: leaderboards/{scenarioId}/entries/{userId}
+    // Structure: leaderboards/{scenarioId}/entries/{userId} (all-time)
+    //            leaderboards/{scenarioId}/weeks/{weekId}/entries/{userId} (weekly)
     match /leaderboards/{scenarioId} {
-      // Allow reading the scenario document (metadata if any)
       allow read: if isAuthenticated();
 
+      // All-time leaderboard
       match /entries/{entryUserId} {
-        // Anyone authenticated can read leaderboard entries
         allow read: if isAuthenticated();
 
-        // Create: user can only create their own entry (doc ID must match auth UID)
-        // Validate required fields and plausibility
+        // Create: user can only create their own entry
         allow create: if isAuthenticated() &&
           entryUserId == request.auth.uid &&
+          validLeaderboardEntryFields() &&
           request.resource.data.userId == request.auth.uid &&
           request.resource.data.displayName is string &&
           request.resource.data.displayName.size() > 0 &&
           request.resource.data.displayName.size() <= 50 &&
+          displayNameMatches(request.auth.uid) &&
           request.resource.data.score is number &&
           request.resource.data.score >= 0 &&
           request.resource.data.score <= 1000 &&
@@ -64,13 +87,42 @@ service cloud.firestore {
           request.resource.data.accuracy <= 100 &&
           request.resource.data.scenarioId == scenarioId;
 
-        // Update: user can only update their own entry
-        // Score must be higher than existing (enforced by requiring improvement)
+        // Update: user can only update their own entry with a STRICTLY higher score
         allow update: if isAuthenticated() &&
           entryUserId == request.auth.uid &&
+          validLeaderboardEntryFields() &&
           resource.data.userId == request.auth.uid &&
           request.resource.data.userId == request.auth.uid &&
-          request.resource.data.score >= resource.data.score &&
+          request.resource.data.score > resource.data.score &&
+          request.resource.data.score >= 0 &&
+          request.resource.data.score <= 1000 &&
+          request.resource.data.displayName is string &&
+          request.resource.data.displayName.size() > 0 &&
+          request.resource.data.displayName.size() <= 50 &&
+          displayNameMatches(request.auth.uid) &&
+          request.resource.data.accuracy is number &&
+          request.resource.data.accuracy >= 0 &&
+          request.resource.data.accuracy <= 100 &&
+          request.resource.data.scenarioId == scenarioId;
+
+        // Delete: only admins can delete
+        allow delete: if isAdmin();
+      }
+
+      // Weekly leaderboard buckets
+      match /weeks/{weekId}/entries/{entryUserId} {
+        allow read: if isAuthenticated();
+
+        // Create: user can only create their own entry for this week
+        allow create: if isAuthenticated() &&
+          entryUserId == request.auth.uid &&
+          validLeaderboardEntryFields() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.displayName is string &&
+          request.resource.data.displayName.size() > 0 &&
+          request.resource.data.displayName.size() <= 50 &&
+          displayNameMatches(request.auth.uid) &&
+          request.resource.data.score is number &&
           request.resource.data.score >= 0 &&
           request.resource.data.score <= 1000 &&
           request.resource.data.accuracy is number &&
@@ -78,7 +130,25 @@ service cloud.firestore {
           request.resource.data.accuracy <= 100 &&
           request.resource.data.scenarioId == scenarioId;
 
-        // Delete: only admins can delete (users cannot remove their entries)
+        // Update: user can only update with a STRICTLY higher score
+        allow update: if isAuthenticated() &&
+          entryUserId == request.auth.uid &&
+          validLeaderboardEntryFields() &&
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.score > resource.data.score &&
+          request.resource.data.score >= 0 &&
+          request.resource.data.score <= 1000 &&
+          request.resource.data.displayName is string &&
+          request.resource.data.displayName.size() > 0 &&
+          request.resource.data.displayName.size() <= 50 &&
+          displayNameMatches(request.auth.uid) &&
+          request.resource.data.accuracy is number &&
+          request.resource.data.accuracy >= 0 &&
+          request.resource.data.accuracy <= 100 &&
+          request.resource.data.scenarioId == scenarioId;
+
+        // Delete: only admins can delete
         allow delete: if isAdmin();
       }
     }
