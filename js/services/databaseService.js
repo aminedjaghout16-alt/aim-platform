@@ -281,23 +281,16 @@ VantageServices.DatabaseService = {
   // Get ISO week ID for a date (format: "2026-W41")
   _getWeekId(date) {
     var d = date || new Date();
-    // Get ISO week number
-    var target = new Date(d.valueOf());
-    var dayNr = (d.getDay() + 6) % 7;
-    target.setDate(target.getDate() - dayNr + 3);
-    var firstThursday = target.valueOf();
-    target.setMonth(0, 1);
-    if (target.getDay() !== 4) {
-      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-    }
-    var weekNumber = 1 + Math.ceil((firstThursday - target) / 604800000);
-    var year = d.getFullYear();
-    // Handle year boundary for week 1
-    if (weekNumber > 52) {
-      year++;
-      weekNumber = 1;
-    }
-    return year + '-W' + (weekNumber < 10 ? '0' : '') + weekNumber;
+    // ISO-8601 week in UTC (Thursday of the week decides the year)
+    var t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    var dayNr = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - dayNr + 3);
+    var isoYear = t.getUTCFullYear();
+    var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+    var fDay = (firstThursday.getUTCDay() + 6) % 7;
+    firstThursday.setUTCDate(firstThursday.getUTCDate() - fDay + 3);
+    var weekNumber = 1 + Math.round((t - firstThursday) / 604800000);
+    return isoYear + '-W' + (weekNumber < 10 ? '0' : '') + weekNumber;
   },
 
   // Submit or update a leaderboard entry for a scenario.
@@ -311,11 +304,19 @@ VantageServices.DatabaseService = {
     var allTimeRef = db.collection('leaderboards').doc(scenarioId).collection('entries').doc(userId);
     var weeklyRef = db.collection('leaderboards').doc(scenarioId).collection('weeks').doc(weekId).collection('entries').doc(userId);
 
+    // The security rules require displayName to equal users/{uid}.displayName,
+    // so always read it from the profile doc instead of trusting client state.
+    var profileName = null;
+    try {
+      var profileDoc = await db.collection('users').doc(userId).get();
+      if (profileDoc.exists) profileName = profileDoc.data().displayName;
+    } catch (e) { console.warn('Could not read profile for leaderboard name:', e); }
+
     var docData = {
       userId: userId,
-      displayName: entry.displayName || 'Operator',
-      score: entry.score || 0,
-      accuracy: entry.accuracy || 0,
+      displayName: profileName || entry.displayName || 'Operator',
+      score: Math.max(0, Math.min(1000, Math.round(entry.score || 0))),
+      accuracy: Math.max(0, Math.min(100, Math.round(entry.accuracy || 0))),
       scenarioId: scenarioId,
       weaponId: entry.weaponId || null,
       grade: entry.grade || null,
@@ -333,18 +334,18 @@ VantageServices.DatabaseService = {
       var weeklyScore = weeklyDoc.exists ? (weeklyDoc.data().score || 0) : -1;
 
       // Only write if the new score beats at least one of them
-      if (allTimeDoc.exists && entry.score <= allTimeScore &&
-          weeklyDoc.exists && entry.score <= weeklyScore) {
+      if (allTimeDoc.exists && docData.score <= allTimeScore &&
+          weeklyDoc.exists && docData.score <= weeklyScore) {
         return { updated: false, reason: 'score_not_better' };
       }
 
       // Write to all-time if it's a new best
-      if (!allTimeDoc.exists || entry.score > allTimeScore) {
+      if (!allTimeDoc.exists || docData.score > allTimeScore) {
         transaction.set(allTimeRef, docData);
       }
 
       // Write to weekly if it's a new best for this week
-      if (!weeklyDoc.exists || entry.score > weeklyScore) {
+      if (!weeklyDoc.exists || docData.score > weeklyScore) {
         transaction.set(weeklyRef, docData);
       }
 

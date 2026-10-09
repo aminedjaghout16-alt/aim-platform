@@ -138,7 +138,7 @@
           displayName: user.displayName || 'Operator',
         });
       } catch (err) {
-        console.warn('Could not submit leaderboard entry:', err);
+        console.error('Could not submit leaderboard entry:', err && err.code, err && err.message, err);
       }
 
       return { previousBest, isPersonalBest: previousBest === null || result.score > previousBest };

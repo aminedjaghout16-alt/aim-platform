@@ -152,6 +152,12 @@ VantageServices.AuthService = {
       });
 
       await this._waitForUser();
+      // The auth listener may have created an "Operator" profile first (race);
+      // make sure local state matches the profile we just wrote.
+      if (this._currentUser && displayName) {
+        this._currentUser.displayName = displayName;
+        this._notify();
+      }
       return this._currentUser;
     } catch (err) {
       throw this._formatAuthError(err);
