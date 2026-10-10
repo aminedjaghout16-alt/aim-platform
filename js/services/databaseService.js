@@ -212,28 +212,52 @@ VantageServices.DatabaseService = {
 
   // ─── Saved Playlists ─────────────────────────────────
 
+  // Strip undefined values (Firestore rejects them) and keep only known fields
+  _cleanPlaylistItems(items) {
+    return (items || []).map(function (it) {
+      return {
+        id: it.id || '',
+        name: it.name || '',
+        duration: it.duration || 'standard',
+        durationSeconds: typeof it.durationSeconds === 'number' ? it.durationSeconds : 60,
+        difficulty: it.difficulty || 'medium',
+      };
+    });
+  },
+
+  _timeOf(v) {
+    if (!v) return 0;
+    if (typeof v.toMillis === 'function') return v.toMillis();
+    var t = new Date(v).getTime();
+    return isNaN(t) ? 0 : t;
+  },
+
   async savePlaylist(userId, playlist) {
     var db = this._db();
     var docData = {
       userId: userId,
-      name: playlist.name || 'Untitled Playlist',
-      items: playlist.items || [],
+      name: String(playlist.name || 'Untitled Playlist').slice(0, 100),
+      items: this._cleanPlaylistItems(playlist.items),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     var ref = await db.collection('playlists').add(docData);
     return { id: ref.id, ...docData };
   },
 
+  // No orderBy here on purpose: userId + createdAt needs a composite index,
+  // and if it is missing the whole query fails and saved playlists "vanish".
+  // The list is small, so we sort on the client instead.
   async getUserPlaylists(userId) {
     var db = this._db();
+    var self = this;
     var snap = await db.collection('playlists')
       .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
       .get();
     var playlists = [];
     snap.forEach(function (doc) {
       playlists.push({ id: doc.id, ...doc.data() });
     });
+    playlists.sort(function (x, y) { return self._timeOf(y.createdAt) - self._timeOf(x.createdAt); });
     return playlists;
   },
 

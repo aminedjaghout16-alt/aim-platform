@@ -31,23 +31,18 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
   }, [saveMessage]);
 
   const loadSavedPlaylists = async () => {
-    try {
-      if (user && user.uid) {
-        var playlists = await DB.getUserPlaylists(user.uid);
-        setSavedPlaylists(playlists);
-      } else {
-        var localPlaylists = DB.getLocalPlaylists();
-        setSavedPlaylists(localPlaylists);
-      }
-    } catch (err) {
-      console.error('Failed to load playlists:', err);
-      // Fall back to local storage if Firebase fails
+    var local = [];
+    try { local = DB.getLocalPlaylists(); } catch (e0) { local = []; }
+    if (user && user.uid) {
       try {
-        var localPlaylists = DB.getLocalPlaylists();
-        setSavedPlaylists(localPlaylists);
-      } catch (e2) {
-        setSavedPlaylists([]);
+        var cloud = await DB.getUserPlaylists(user.uid);
+        setSavedPlaylists(cloud.concat(local));
+      } catch (err) {
+        console.error('Failed to load playlists from Firebase:', err && err.code, err && err.message, err);
+        setSavedPlaylists(local);
       }
+    } else {
+      setSavedPlaylists(local);
     }
   };
 
@@ -133,7 +128,7 @@ VantageComponents.PlaylistCreator = function PlaylistCreator({ onNavigate, onSta
       await loadSavedPlaylists();
       setShowSavedPlaylists(true); // Auto-expand to show the new playlist
     } catch (err) {
-      console.error('Failed to save playlist:', err);
+      console.error('Failed to save playlist to Firebase:', err && err.code, err && err.message, err);
       // Try local storage as fallback
       try {
         const playlistData = {
