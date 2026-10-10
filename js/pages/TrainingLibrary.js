@@ -83,6 +83,22 @@ VantagePages.TrainingLibrary = function TrainingLibrary({ onNavigate, onSelectSc
       }, 'CREATE PLAYLIST'),
     }),
 
+    // Tactical Scenarios Banner
+    e('div', { 
+      className: 'vtactical-banner animate-in',
+      onClick: () => onNavigate('tactical-scenarios'),
+      style: { cursor: 'pointer' }
+    },
+      e('div', { className: 'vtactical-banner-content' },
+        e('div', { className: 'vtactical-banner-badge' }, 'NEW MODE'),
+        e('h2', { className: 'vtactical-banner-title' }, 'TACTICAL SCENARIOS'),
+        e('p', { className: 'vtactical-banner-desc' }, 'VALORANT-style training: counter-strafe, peek, micro-adjust, track movers, and duel with pistols'),
+        e('div', { className: 'vtactical-banner-action' },
+          e(VantageUI.Button, { variant: 'accent', size: 'sm', onClick: (ev) => { ev.stopPropagation(); onNavigate('tactical-scenarios'); } }, 'OPEN SCENARIOS'),
+        ),
+      ),
+    ),
+
     showPlaylistCreator && e(VantageComponents.PlaylistCreator, {
       onNavigate: onNavigate,
       onStartPlaylist: (playlist) => {

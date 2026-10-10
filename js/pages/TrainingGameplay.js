@@ -212,6 +212,83 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.grade = adjustshotScore.grade.letter;
         res.isAdjustshotMode = true;
       }
+      // For tactical scenarios: merge renderer stats and recalculate score
+      if (engine.renderer && engine.renderer.getCounterStrafeStats) {
+        var cs = engine.renderer.getCounterStrafeStats();
+        var csInput = Object.assign({}, cs, {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          shotsFired: cs.shotsFired || (res.stats.hits || 0) + (res.stats.misses || 0),
+          avgReactionTime: res.stats.avgReactionTime || 0,
+          duration: res.stats.duration || 1,
+        });
+        var csScore = VantageEngine.Scoring.calculateCounterStrafeScore(csInput);
+        Object.assign(res.stats, cs);
+        res.stats.shotsFired = csInput.shotsFired;
+        res.score = csScore.total;
+        res.grade = csScore.grade.letter;
+        res.isCounterStrafeMode = true;
+      }
+      if (engine.renderer && engine.renderer.getPeekEliminateStats) {
+        var pe = engine.renderer.getPeekEliminateStats();
+        var peInput = Object.assign({}, pe, {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          duration: res.stats.duration || 1,
+        });
+        var peScore = VantageEngine.Scoring.calculatePeekEliminateScore(peInput);
+        Object.assign(res.stats, pe);
+        res.score = peScore.total;
+        res.grade = peScore.grade.letter;
+        res.isPeekEliminateMode = true;
+      }
+      if (engine.renderer && engine.renderer.getMicroAdjustStats) {
+        var ma = engine.renderer.getMicroAdjustStats();
+        var maInput = Object.assign({}, ma, {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          shotsFired: ma.shotsFired || (res.stats.hits || 0) + (res.stats.misses || 0),
+          avgReactionTime: res.stats.avgReactionTime || 0,
+          duration: res.stats.duration || 1,
+        });
+        var maScore = VantageEngine.Scoring.calculateMicroAdjustScore(maInput);
+        Object.assign(res.stats, ma);
+        res.stats.shotsFired = maInput.shotsFired;
+        res.score = maScore.total;
+        res.grade = maScore.grade.letter;
+        res.isMicroAdjustMode = true;
+      }
+      if (engine.renderer && engine.renderer.getMovingEnemyStats) {
+        var me = engine.renderer.getMovingEnemyStats();
+        var meInput = Object.assign({}, me, {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          shotsFired: me.shotsFired || (res.stats.hits || 0) + (res.stats.misses || 0),
+          bestStreak: res.stats.bestStreak || 0,
+          duration: res.stats.duration || 1,
+        });
+        var meScore = VantageEngine.Scoring.calculateMovingEnemyScore(meInput);
+        Object.assign(res.stats, me);
+        res.stats.shotsFired = meInput.shotsFired;
+        res.score = meScore.total;
+        res.grade = meScore.grade.letter;
+        res.isMovingEnemyMode = true;
+      }
+      if (engine.renderer && engine.renderer.getDuelPracticeStats) {
+        var dp = engine.renderer.getDuelPracticeStats();
+        var dpInput = Object.assign({}, dp, {
+          hits: res.stats.hits || 0,
+          misses: res.stats.misses || 0,
+          shotsFired: dp.shotsFired || (res.stats.hits || 0) + (res.stats.misses || 0),
+          duration: res.stats.duration || 1,
+        });
+        var dpScore = VantageEngine.Scoring.calculateDuelPracticeScore(dpInput);
+        Object.assign(res.stats, dp);
+        res.stats.shotsFired = dpInput.shotsFired;
+        res.score = dpScore.total;
+        res.grade = dpScore.grade.letter;
+        res.isDuelPracticeMode = true;
+      }
       // BENCHMARK MODE: no regular results screen. Hand the result straight to
       // the benchmark flow, which shows its own stage progress and countdown.
       // Do NOT save to the regular results collection — the benchmark service
@@ -491,6 +568,12 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const isReactiveTrackingMode = scenario && scenario.id === 'reactive-tracking-3d';
   const isBotStrafeMode = scenario && scenario.id === 'bot-strafe-3d';
   const isAdjustshotMode = scenario && scenario.id === 'adjustshot-3d';
+  const isCounterStrafeMode = scenario && scenario.id === 'tac-counter-strafe';
+  const isPeekEliminateMode = scenario && scenario.id === 'tac-peek-eliminate';
+  const isMicroAdjustMode = scenario && scenario.id === 'tac-micro-adjust';
+  const isMovingEnemyMode = scenario && scenario.id === 'tac-moving-enemy';
+  const isDuelPracticeMode = scenario && scenario.id === 'tac-duel-practice';
+  const isTacticalMode = scenario && scenario.isTacticalScenario;
   const sd = tickData?.sessionData;
   const hits = isTrackingMode ? 0 : (sd?.hits || 0);
   const misses = isTrackingMode ? 0 : (sd?.misses || 0);
@@ -544,23 +627,70 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
                         duration: sd?.duration || 1,
                       }).total
                     : 0)
-                : isAdjustshotMode
-                    ? (sd && totalShots > 0
-                        ? VantageEngine.Scoring.calculateAdjustshotScore({
-                            hits: hits,
-                            misses: misses,
-                            shotsFired: totalShots,
-                            avgReactionTime: sd.avgReactionTime || 0,
-                            targetsKilled: sd.hits || 0,
-                            headshots: sd.headshots || 0,
-                            bodyKills: sd.bodyKills || 0,
-                            bestStreak: sd.bestStreak || 0,
-                            duration: sd?.duration || 1,
-                          }).total
-                        : 0)
-                    : (sd && totalShots > 0
-                        ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
-                        : 0);
+                    : isAdjustshotMode
+                        ? (sd && totalShots > 0
+                            ? VantageEngine.Scoring.calculateAdjustshotScore({
+                                hits: hits,
+                                misses: misses,
+                                shotsFired: totalShots,
+                                avgReactionTime: sd.avgReactionTime || 0,
+                                targetsKilled: sd.hits || 0,
+                                headshots: sd.headshots || 0,
+                                bodyKills: sd.bodyKills || 0,
+                                bestStreak: sd.bestStreak || 0,
+                                duration: sd?.duration || 1,
+                              }).total
+                            : 0)
+                        : isCounterStrafeMode
+                            ? (sd && totalShots > 0
+                                ? VantageEngine.Scoring.calculateCounterStrafeScore({
+                                    hits: hits,
+                                    misses: misses,
+                                    shotsFired: totalShots,
+                                    avgReactionTime: sd.avgReactionTime || 0,
+                                    duration: sd?.duration || 1,
+                                  }).total
+                                : 0)
+                            : isPeekEliminateMode
+                                ? (sd && totalShots > 0
+                                    ? VantageEngine.Scoring.calculatePeekEliminateScore({
+                                        hits: hits,
+                                        misses: misses,
+                                        duration: sd?.duration || 1,
+                                      }).total
+                                    : 0)
+                                : isMicroAdjustMode
+                                    ? (sd && totalShots > 0
+                                        ? VantageEngine.Scoring.calculateMicroAdjustScore({
+                                            hits: hits,
+                                            misses: misses,
+                                            shotsFired: totalShots,
+                                            avgReactionTime: sd.avgReactionTime || 0,
+                                            duration: sd?.duration || 1,
+                                          }).total
+                                        : 0)
+                                    : isMovingEnemyMode
+                                        ? (sd && totalShots > 0
+                                            ? VantageEngine.Scoring.calculateMovingEnemyScore({
+                                                hits: hits,
+                                                misses: misses,
+                                                shotsFired: totalShots,
+                                                bestStreak: sd.bestStreak || 0,
+                                                duration: sd?.duration || 1,
+                                              }).total
+                                            : 0)
+                                        : isDuelPracticeMode
+                                            ? (sd && totalShots > 0
+                                                ? VantageEngine.Scoring.calculateDuelPracticeScore({
+                                                    hits: hits,
+                                                    misses: misses,
+                                                    shotsFired: totalShots,
+                                                    duration: sd?.duration || 1,
+                                                  }).total
+                                                : 0)
+                                            : (sd && totalShots > 0
+                                                ? VantageEngine.Scoring.calculateScore({ ...sd, accuracy: hits / totalShots }).total
+                                                : 0);
   const progression = tickData?.progression || 0;
 
   const remainingSec = tickData && tickData.remaining !== null && tickData.remaining !== undefined
@@ -984,6 +1114,108 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
+            e(VantageUI.Button, { variant: 'primary', onClick: handlePlayAgain }, 'PLAY AGAIN'),
+          ),
+        ),
+      );
+    }
+
+    // Tactical Scenarios results screen (generic for all 5 modes)
+    if (isTacticalMode) {
+      var tacShots = result.stats.shotsFired || ((result.stats.hits || 0) + (result.stats.misses || 0));
+      var tacAccuracy = result.stats.accuracy || (tacShots > 0 ? Math.round((result.stats.hits / tacShots) * 100) : 0);
+      var tacSummary = [dur && dur.label, weaponUsed].filter(Boolean).join(' · ');
+      var tacSaveLine = 'Saving session…';
+      var tacSaveClass = 'vresults-save';
+      if (saveInfo) {
+        if (saveInfo.previousBest === null) tacSaveLine = 'First session saved to your history';
+        else if (saveInfo.isPersonalBest) { tacSaveLine = '★ NEW PERSONAL BEST'; tacSaveClass += ' vresults-save-pb'; }
+        else tacSaveLine = 'Session saved · Personal best ' + saveInfo.previousBest;
+      }
+
+      // Build stats array based on which tactical mode
+      var tacStatsList = [
+        [result.score, 'Score'],
+        [tacAccuracy + '%', 'Accuracy'],
+        [result.stats.hits || 0, 'Hits'],
+        [result.stats.misses || 0, 'Misses'],
+        [tacShots, 'Shots Fired'],
+      ];
+
+      if (result.isCounterStrafeMode) {
+        tacStatsList.push(
+          [(result.stats.stoppedAccuracy || 0) + '%', 'Stopped Accuracy'],
+          [result.stats.counterStrafeHits || 0, 'Counter-Strafe Hits'],
+          [result.stats.shotsWhileMoving || 0, 'Shots While Moving'],
+          [result.stats.shotsWhileStopped || 0, 'Shots While Stopped']
+        );
+      }
+      if (result.isPeekEliminateMode) {
+        tacStatsList.push(
+          [result.stats.targetsEliminated || 0, 'Targets Eliminated'],
+          [result.stats.totalTargets || 0, 'Total Targets'],
+          [(result.stats.avgTimeToEliminate || 0) + 'ms', 'Avg Elimination Time'],
+          [result.stats.damageTaken || 0, 'Damage Taken'],
+          [result.stats.peeksPerformed || 0, 'Peeks Performed']
+        );
+      }
+      if (result.isMicroAdjustMode) {
+        tacStatsList.push(
+          [(result.stats.firstShotAccuracy || 0) + '%', 'First-Shot Accuracy'],
+          [result.stats.firstShotHits || 0, 'First-Shot Hits'],
+          [result.stats.overcorrections || 0, 'Overcorrections'],
+          [(result.stats.avgReactionTime || 0) + 'ms', 'Avg Reaction Time']
+        );
+      }
+      if (result.isMovingEnemyMode) {
+        tacStatsList.push(
+          [result.stats.targetsDestroyed || 0, 'Targets Destroyed'],
+          [(result.stats.avgHitTime || 0) + 'ms', 'Avg Hit Time'],
+          [(result.stats.avgTrackingError || 0).toFixed(1) + '°', 'Avg Tracking Error'],
+          [result.stats.bestStreak || 0, 'Best Streak']
+        );
+      }
+      if (result.isDuelPracticeMode) {
+        tacStatsList.push(
+          [result.stats.eliminations || 0, 'Eliminations'],
+          [result.stats.headshots || 0, 'Headshots'],
+          [(result.stats.ammoUsed || 0) + '/' + (result.stats.ammoTotal || '?'), 'Ammo Used'],
+          [(result.stats.avgHitTime || 0) + 'ms', 'Avg Hit Time']
+        );
+      }
+
+      tacStatsList.push(
+        [result.stats.bestStreak || 0, 'Best Hit Streak'],
+        [result.stats.duration + 's', 'Session Duration'],
+        [weaponUsed, 'Weapon Used']
+      );
+
+      return e('div', { className: 'vpage-gameplay vpage-results-overlay' },
+        e('div', { className: 'vresults-screen animate-in' },
+          e('div', { className: 'vresults-scenario' }, (scenario ? scenario.name : 'Tactical Scenario') + ' — Complete'),
+          e('div', { className: 'vresults-grade', style: { color: grade.color || 'var(--accent-primary)' } },
+            e('span', { className: 'vresults-grade-letter' }, result.grade),
+            e('span', { className: 'vresults-grade-label' }, grade.label || ''),
+          ),
+          e('div', { className: 'vresults-score' },
+            e('span', { className: 'vresults-score-value' }, result.score),
+            e('span', { className: 'vresults-score-label' }, 'SCORE'),
+          ),
+          e('div', { className: tacSaveClass }, tacSaveLine),
+          e('div', { className: 'vresults-stats' },
+            tacStatsList.map(function (pair, idx) {
+              var value = pair[0], label = pair[1];
+              return e('div', { key: idx, className: 'vresults-stat' },
+                e('span', { className: 'vresults-stat-value' }, value),
+                e('span', { className: 'vresults-stat-label' }, label),
+              );
+            })
+          ),
+          tacSummary && e('div', { className: 'vresults-config' }, tacSummary),
+          renderAnalysis(),
+          e('div', { className: 'vresults-actions' },
+            e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
+            e(VantageUI.Button, { variant: 'secondary', onClick: function () { onNavigate('tactical-scenarios'); } }, 'ALL SCENARIOS'),
             e(VantageUI.Button, { variant: 'primary', onClick: handlePlayAgain }, 'PLAY AGAIN'),
           ),
         ),

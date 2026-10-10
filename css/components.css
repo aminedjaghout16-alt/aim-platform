@@ -4625,3 +4625,50 @@
     margin-top: 8px;
   }
 }
+
+/* --- Tactical Scenarios Banner --- */
+.vtactical-banner {
+  margin: 0 0 20px;
+  padding: 24px 28px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0,224,208,.08) 0%, rgba(68,138,255,.06) 50%, rgba(0,224,208,.04) 100%);
+  border: 1px solid rgba(0,224,208,.18);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.vtactical-banner:hover {
+  border-color: rgba(0,224,208,.35);
+  box-shadow: 0 4px 24px rgba(0,224,208,.08);
+}
+.vtactical-banner-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.vtactical-banner-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #0e0e10;
+  background: var(--accent-primary, #00e0d0);
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+.vtactical-banner-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-primary, #e8e8ef);
+  margin: 0;
+}
+.vtactical-banner-desc {
+  flex: 1 1 100%;
+  font-size: 13px;
+  color: var(--text-secondary, #8b8fa3);
+  margin: 0;
+  line-height: 1.5;
+}
+.vtactical-banner-action {
+  margin-top: 4px;
+}

@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'performance', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history', 'benchmark'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'performance', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history', 'benchmark', 'tactical-scenarios'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -434,6 +434,14 @@
             activeBenchmark: activeBenchmark,
             onBenchmarkStageConsumed: handleBenchmarkStageConsumed,
             onBenchmarkAbandon: handleBenchmarkAbandon,
+          });
+        case 'tactical-scenarios':
+          return e(VantagePages.TacticalScenarios, {
+            onNavigate: navigate,
+            onSelectScenario: handleSelectScenario,
+            onQuickStart: handleQuickStart,
+            onStartTraining: handleStartTraining,
+            user: user,
           });
         default:
           return e(VantagePages.Dashboard, { onNavigate: navigate, user: user });

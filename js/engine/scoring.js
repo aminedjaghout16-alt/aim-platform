@@ -301,6 +301,222 @@ VantageEngine.Scoring = {
     };
   },
 
+  // ===== TACTICAL SCENARIO SCORING =====
+
+  // Counter-Strafe & Shoot scoring
+  calculateCounterStrafeScore(stats) {
+    var hits = stats.hits || 0;
+    var misses = stats.misses || 0;
+    var totalShots = stats.shotsFired || (hits + misses);
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var hitsWhileStopped = stats.hitsWhileStopped || 0;
+    var shotsWhileStopped = stats.shotsWhileStopped || 0;
+    var counterStrafeHits = stats.counterStrafeHits || 0;
+    var avgReactionTime = stats.avgReactionTime || 0;
+    var duration = stats.duration || 1;
+
+    // Stopped accuracy score (0-400): rewards shooting only when still
+    var stoppedAccuracy = shotsWhileStopped > 0 ? hitsWhileStopped / shotsWhileStopped : 0;
+    var stoppedScore = stoppedAccuracy * 400;
+
+    // Counter-strafe bonus (0-250): rewards hits right after stopping
+    var csRatio = hits > 0 ? counterStrafeHits / hits : 0;
+    var csScore = csRatio * 250;
+
+    // Speed score (0-200): faster reactions earn more
+    var speedScore = 0;
+    if (avgReactionTime > 0 && avgReactionTime < 2000) {
+      speedScore = Math.max(0, 200 - (avgReactionTime - 200) * 0.12);
+    }
+
+    // Volume factor
+    var expectedHits = Math.max(5, duration * 0.35);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((stoppedScore + csScore + speedScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      stoppedAccuracy: Math.round(stoppedAccuracy * 100),
+      grade: this.getGrade(total),
+    };
+  },
+
+  // Peek and Eliminate scoring
+  calculatePeekEliminateScore(stats) {
+    var targetsEliminated = stats.targetsEliminated || 0;
+    var totalTargets = stats.totalTargets || 1;
+    var avgTimeToEliminate = stats.avgTimeToEliminate || 0;
+    var damageTaken = stats.damageTaken || 0;
+    var peeksPerformed = stats.peeksPerformed || 0;
+    var hits = stats.hits || 0;
+    var misses = stats.misses || 0;
+    var totalShots = hits + misses;
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var duration = stats.duration || 1;
+
+    // Elimination score (0-400): percentage of targets eliminated
+    var elimRatio = totalTargets > 0 ? targetsEliminated / totalTargets : 0;
+    var elimScore = elimRatio * 400;
+
+    // Speed score (0-250): faster eliminations earn more
+    var speedScore = 0;
+    if (avgTimeToEliminate > 0 && avgTimeToEliminate < 3000) {
+      speedScore = Math.max(0, 250 - (avgTimeToEliminate - 200) * 0.1);
+    }
+
+    // Efficiency score (0-200): less damage taken = better
+    var efficiencyScore = Math.max(0, 200 - damageTaken * 25);
+
+    // Volume factor
+    var expectedElims = Math.max(3, duration * 0.15);
+    var volume = Math.min(1, targetsEliminated / expectedElims);
+
+    var total = Math.round((elimScore + speedScore + efficiencyScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      grade: this.getGrade(total),
+    };
+  },
+
+  // Micro-Adjustment Training scoring
+  calculateMicroAdjustScore(stats) {
+    var hits = stats.hits || 0;
+    var misses = stats.misses || 0;
+    var totalShots = stats.shotsFired || (hits + misses);
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var firstShotHits = stats.firstShotHits || 0;
+    var firstShotTotal = stats.firstShotTotal || totalShots;
+    var firstShotAccuracy = firstShotTotal > 0 ? firstShotHits / firstShotTotal : 0;
+    var overcorrections = stats.overcorrections || 0;
+    var avgReactionTime = stats.avgReactionTime || 0;
+    var duration = stats.duration || 1;
+
+    // First-shot accuracy score (0-400): the core metric
+    var precisionScore = firstShotAccuracy * 400;
+
+    // Overall accuracy (0-250)
+    var accuracyScore = accuracy * 250;
+
+    // Penalty for overcorrections (0-200, fewer = better)
+    var overcorrRatio = totalShots > 0 ? overcorrections / totalShots : 0;
+    var correctionScore = Math.max(0, (1 - overcorrRatio * 2)) * 200;
+
+    // Speed score (0-150)
+    var speedScore = 0;
+    if (avgReactionTime > 0 && avgReactionTime < 1500) {
+      speedScore = Math.max(0, 150 - (avgReactionTime - 150) * 0.12);
+    }
+
+    // Volume factor
+    var expectedHits = Math.max(8, duration * 0.5);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((precisionScore + accuracyScore + correctionScore + speedScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      firstShotAccuracy: Math.round(firstShotAccuracy * 100),
+      grade: this.getGrade(total),
+    };
+  },
+
+  // Moving Enemy Engagements scoring
+  calculateMovingEnemyScore(stats) {
+    var hits = stats.hits || 0;
+    var misses = stats.misses || 0;
+    var totalShots = stats.shotsFired || (hits + misses);
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var targetsDestroyed = stats.targetsDestroyed || 0;
+    var avgTrackingError = stats.avgTrackingError || 0;
+    var avgHitTime = stats.avgHitTime || 0;
+    var bestStreak = stats.bestStreak || 0;
+    var duration = stats.duration || 1;
+
+    // Accuracy score (0-350)
+    var accuracyScore = accuracy * 350;
+
+    // Tracking quality (0-250): lower angular error = better
+    var maxError = 20;
+    var trackingScore = Math.max(0, (1 - avgTrackingError / maxError)) * 250;
+
+    // Speed score (0-200)
+    var speedScore = 0;
+    if (avgHitTime > 0 && avgHitTime < 3000) {
+      speedScore = Math.max(0, 200 - (avgHitTime - 300) * 0.08);
+    }
+
+    // Kill pace (0-200)
+    var killsPerSec = targetsDestroyed / duration;
+    var paceScore = Math.min(200, killsPerSec * 100);
+
+    // Volume factor
+    var expectedHits = Math.max(5, duration * 0.35);
+    var volume = Math.min(1, hits / expectedHits);
+
+    var total = Math.round((accuracyScore + trackingScore + speedScore + paceScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      grade: this.getGrade(total),
+    };
+  },
+
+  // Sheriff / Classic Duel Practice scoring
+  calculateDuelPracticeScore(stats) {
+    var hits = stats.hits || 0;
+    var misses = stats.misses || 0;
+    var totalShots = stats.shotsFired || (hits + misses);
+    var accuracy = totalShots > 0 ? hits / totalShots : 0;
+    var eliminations = stats.eliminations || 0;
+    var headshots = stats.headshots || 0;
+    var ammoUsed = stats.ammoUsed || totalShots;
+    var ammoTotal = stats.ammoTotal || 12;
+    var avgHitTime = stats.avgHitTime || 0;
+    var duration = stats.duration || 1;
+
+    // Elimination score (0-350)
+    var maxElims = stats.maxElims || 3;
+    var elimRatio = maxElims > 0 ? eliminations / maxElims : 0;
+    var elimScore = elimRatio * 350;
+
+    // Precision score (0-250): accuracy + headshot bonus
+    var headshotRatio = eliminations > 0 ? headshots / eliminations : 0;
+    var precisionScore = accuracy * 150 + headshotRatio * 100;
+
+    // Ammo efficiency (0-200): fewer shots per elimination = better
+    var shotsPerElim = eliminations > 0 ? ammoUsed / eliminations : ammoUsed;
+    var efficiencyScore = Math.max(0, 200 - (shotsPerElim - 1) * 50);
+
+    // Speed score (0-200)
+    var speedScore = 0;
+    if (avgHitTime > 0 && avgHitTime < 2500) {
+      speedScore = Math.max(0, 200 - (avgHitTime - 200) * 0.1);
+    }
+
+    // Volume factor
+    var expectedElims = Math.max(1, maxElims * 0.5);
+    var volume = Math.min(1, eliminations / expectedElims);
+
+    var total = Math.round((elimScore + precisionScore + efficiencyScore + speedScore) * volume);
+    total = Math.max(0, Math.min(1000, total));
+
+    return {
+      total: total,
+      accuracy: Math.round(accuracy * 100),
+      grade: this.getGrade(total),
+    };
+  },
+
   // Aggregate stats across multiple results
   aggregateStats(results) {
     if (!results.length) return null;
