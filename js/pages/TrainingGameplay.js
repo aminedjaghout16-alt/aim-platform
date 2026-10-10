@@ -210,14 +210,13 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.grade = adjustshotScore.grade.letter;
         res.isAdjustshotMode = true;
       }
-      // BENCHMARK MODE: no regular results screen. Save the result in the
-      // background and hand it straight to the benchmark flow, which shows its own
-      // stage progress and countdown.
+      // BENCHMARK MODE: no regular results screen. Hand the result straight to
+      // the benchmark flow, which shows its own stage progress and countdown.
+      // Do NOT save to the regular results collection — the benchmark service
+      // persists its own results separately.
       if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete) {
         if (!playlistCallbackFiredRef.current) {
           playlistCallbackFiredRef.current = true;
-          Promise.resolve(saveRef.current ? saveRef.current(res) : null)
-            .catch((err) => console.error('[Gameplay] Failed to save benchmark stage result', err));
           onBenchmarkExerciseComplete(res);
         }
         return;
