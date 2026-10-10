@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history', 'benchmark'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'performance', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history', 'benchmark'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -395,6 +395,7 @@
             onDailyExerciseComplete: handleDailyExerciseComplete,
             activeBenchmark: activeBenchmark,
             onBenchmarkExerciseComplete: handleBenchmarkExerciseComplete,
+            uid: user ? user.uid : null,
           });
         case 'results':
           return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, onQuickStart: handleQuickStart });
@@ -407,6 +408,8 @@
           });
         case 'stats':
           return e(VantagePages.Statistics, { onNavigate: navigate, user: user });
+        case 'performance':
+          return e(VantagePages.PerformanceDashboard, { onNavigate: navigate, user: user });
         case 'profile':
           return e(VantagePages.Profile, { user: user, onNavigate: navigate, onLogout: handleLogout });
         case 'settings':

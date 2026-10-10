@@ -7,7 +7,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete, activeDailyPlan, onDailyExerciseComplete, activeBenchmark, onBenchmarkExerciseComplete }) {
+VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete, activeDailyPlan, onDailyExerciseComplete, activeBenchmark, onBenchmarkExerciseComplete, uid }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const saveRef = useRef(onSaveResult);
@@ -25,6 +25,8 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   const [lockError, setLockError] = useState(false);
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState(null);
+  const [previousResults, setPreviousResults] = useState([]);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   const Audio = VantageEngine.Audio;
   const Prefs = VantageEngine.PlayerPrefs;
@@ -320,6 +322,25 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
     else Audio.startMusic();
   }, [engineState, audioReady]);
 
+  useEffect(() => {
+    if (!uid || !scenarioId) return;
+    var cancelled = false;
+    var DB = VantageServices.DatabaseService;
+    setAnalysisLoading(true);
+    DB.getUserResults(uid).then(function (results) {
+      if (cancelled) return;
+      var filtered = (results || []).filter(function (r) { return r.scenarioId === scenarioId; });
+      filtered.sort(function (a, b) {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
+      setPreviousResults(filtered.slice(0, 10));
+      setAnalysisLoading(false);
+    }).catch(function () {
+      if (!cancelled) setAnalysisLoading(false);
+    });
+    return function () { cancelled = true; };
+  }, [uid, scenarioId]);
+
   // Every state change starts from the main menu view
   useEffect(() => { setMenuView('main'); }, [engineState]);
 
@@ -599,6 +620,118 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       if (_w) weaponUsed = _w.name;
     } catch (err) { /* keep default */ }
 
+    var analysis = null;
+    if (VantageEngine.AimAnalysis && result) {
+      try {
+        var pbScore = previousResults.length ? Math.max.apply(null, previousResults.map(function (r) { return r.score; })) : 0;
+        var pbResult = previousResults.length ? previousResults.reduce(function (b, r) { return r.score > b.score ? r : b; }, previousResults[0]) : null;
+        analysis = VantageEngine.AimAnalysis.analyzeSession(result, previousResults, pbResult);
+      } catch (err) { /* analysis unavailable */ }
+    }
+
+    var trendIcon = '\u2192';
+    var trendClass = 'vanalysis-trend-stable';
+    if (analysis && analysis.comparison) {
+      if (analysis.comparison.trend === 'improving') { trendIcon = '\u2191'; trendClass = 'vanalysis-trend-up'; }
+      else if (analysis.comparison.trend === 'declining') { trendIcon = '\u2193'; trendClass = 'vanalysis-trend-down'; }
+    }
+
+    var renderAnalysis = function () {
+      if (!analysis || analysisLoading) return null;
+      var cards = [];
+
+      if (analysis.comparison.sampleSize > 0) {
+        var metrics = [];
+        var scoreDelta = analysis.comparison.vsPrevious.score ? analysis.comparison.vsPrevious.score.delta : null;
+        if (scoreDelta !== null) {
+          metrics.push(e('div', { className: 'vanalysis-metric', key: 'score-delta' },
+            e('span', { className: 'vanalysis-metric-label' }, 'vs Previous'),
+            e('span', { className: 'vanalysis-metric-value' + (scoreDelta >= 0 ? ' vanalysis-positive' : ' vanalysis-negative') },
+              (scoreDelta >= 0 ? '+' : '') + scoreDelta),
+          ));
+        }
+        if (analysis.comparison.recentAverage) {
+          metrics.push(e('div', { className: 'vanalysis-metric', key: 'avg' },
+            e('span', { className: 'vanalysis-metric-label' }, 'Avg (last ' + analysis.comparison.sampleSize + ')'),
+            e('span', { className: 'vanalysis-metric-value' }, Math.round(analysis.comparison.recentAverage)),
+          ));
+        }
+        cards.push(
+          e('div', { className: 'vanalysis-card', key: 'comparison' },
+            e('div', { className: 'vanalysis-title' }, 'Performance Analysis'),
+            e('div', { className: 'vanalysis-metrics' }, metrics),
+            e('div', { className: 'vanalysis-trend-row' },
+              e('span', { className: 'vanalysis-trend ' + trendClass }, trendIcon + ' ' + (analysis.comparison.trend || 'stable').replace('_', ' ')),
+              e('span', { className: 'vanalysis-sample' }, 'Based on ' + analysis.comparison.sampleSize + ' session' + (analysis.comparison.sampleSize !== 1 ? 's' : '')),
+            ),
+          ),
+        );
+      } else {
+        cards.push(
+          e('div', { className: 'vanalysis-card', key: 'comparison' },
+            e('div', { className: 'vanalysis-title' }, 'Performance Analysis'),
+            e('div', { className: 'vanalysis-empty' }, 'Complete more sessions to establish a baseline for comparison.'),
+          ),
+        );
+      }
+
+      if (analysis.personalBestInfo && analysis.personalBestInfo.isNewBest) {
+        cards.push(
+          e('div', { className: 'vanalysis-card vanalysis-card-pb', key: 'pb' },
+            e('div', { className: 'vanalysis-title vanalysis-title-pb' }, '\u2605 NEW PERSONAL BEST'),
+            e('div', { className: 'vanalysis-pb-detail' },
+              'Score of ' + result.score + ' beats previous best of ' + analysis.personalBestInfo.previousBest,
+              analysis.personalBestInfo.improvedMetric ? ' \u2014 improved ' + analysis.personalBestInfo.improvedMetric : '',
+            ),
+          ),
+        );
+      }
+
+      if (analysis.feedback && analysis.feedback.length) {
+        var feedbackItems = analysis.feedback.slice(0, 3).map(function (fb, idx) {
+          var icon = fb.type === 'strength' ? '\u2713' : fb.type === 'weakness' ? '\u26A0' : '\uD83D\uDCA1';
+          return e('div', { className: 'vanalysis-feedback', key: idx },
+            e('span', { className: 'vanalysis-feedback-icon vanalysis-feedback-' + fb.type }, icon),
+            e('span', { className: 'vanalysis-feedback-text' }, fb.message),
+          );
+        });
+        cards.push(
+          e('div', { className: 'vanalysis-card', key: 'feedback' },
+            e('div', { className: 'vanalysis-title' }, 'Feedback'),
+            e('div', { className: 'vanalysis-feedback-list' }, feedbackItems),
+          ),
+        );
+      }
+
+      if (analysis.comparison.sampleSize > 0) {
+        var weaknesses = [];
+        try {
+          var allUserResults = previousResults.concat([result]);
+          weaknesses = VantageEngine.AimAnalysis.detectWeaknesses(allUserResults);
+        } catch (err) { /* unavailable */ }
+        if (weaknesses.length) {
+          var top = weaknesses[0];
+          var suggestedName = top.suggestedExercise;
+          try {
+            var s = VantageEngine.Scenarios.getById(top.suggestedExercise);
+            if (s) suggestedName = s.name;
+          } catch (err) { /* keep id */ }
+          cards.push(
+            e('div', { className: 'vanalysis-card', key: 'recommendation' },
+              e('div', { className: 'vanalysis-title' }, 'Recommendation'),
+              e('div', { className: 'vanalysis-recommendation' },
+                e('div', { className: 'vanalysis-rec-exercise' }, 'Try: ' + suggestedName),
+                e('div', { className: 'vanalysis-rec-reason' }, top.recommendation),
+                e(VantageUI.Button, { variant: 'primary', size: 'sm', onClick: function () { onNavigate('training'); } }, 'VIEW EXERCISES'),
+              ),
+            ),
+          );
+        }
+      }
+
+      return e('div', { className: 'vanalysis-section' }, cards);
+    };
+
     if (isTargetSwitching) {
       // Target Switching results screen
       var tsShots = (result.stats.hits || 0) + (result.stats.misses || 0);
@@ -652,6 +785,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           tsSummary && e('div', { className: 'vresults-config' }, tsSummary),
+          renderAnalysis(),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
@@ -713,6 +847,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           rtSummary && e('div', { className: 'vresults-config' }, rtSummary),
+          renderAnalysis(),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
@@ -774,6 +909,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           bsSummary && e('div', { className: 'vresults-config' }, bsSummary),
+          renderAnalysis(),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
@@ -844,6 +980,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           adjSummary && e('div', { className: 'vresults-config' }, adjSummary),
+          renderAnalysis(),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
@@ -900,6 +1037,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             })
           ),
           tSummary && e('div', { className: 'vresults-config' }, tSummary),
+          renderAnalysis(),
           e('div', { className: 'vresults-actions' },
             e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('training'); } }, 'EXIT'),
             e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),
@@ -957,6 +1095,7 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
           ),
         ),
         summary && e('div', { className: 'vresults-config' }, summary),
+        renderAnalysis(),
         e('div', { className: 'vresults-actions' },
           e(VantageUI.Button, { variant: 'ghost', onClick: () => onNavigate('training') }, 'EXIT'),
           e(VantageUI.Button, { variant: 'secondary', onClick: handleViewHistory }, 'VIEW HISTORY'),

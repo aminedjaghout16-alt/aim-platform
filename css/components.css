@@ -1777,6 +1777,202 @@
 }
 .vsetup-hint { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-tertiary); margin-top: -4px; }
 
+/* ============================================
+   Smart Aim Analysis — Results Section
+   ============================================ */
+.vanalysis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.vanalysis-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  text-align: left;
+  width: 100%;
+}
+
+.vanalysis-card-pb {
+  border-color: rgba(255, 184, 48, 0.3);
+  background: rgba(255, 184, 48, 0.04);
+}
+
+.vanalysis-title {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.vanalysis-title-pb {
+  color: var(--accent-secondary);
+  border-bottom-color: rgba(255, 184, 48, 0.2);
+}
+
+.vanalysis-metrics {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.vanalysis-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vanalysis-metric-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.vanalysis-metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.vanalysis-positive { color: var(--accent-primary); }
+.vanalysis-negative { color: var(--error); }
+
+.vanalysis-trend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.vanalysis-trend {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vanalysis-trend-up { color: var(--accent-primary); }
+.vanalysis-trend-down { color: var(--error); }
+.vanalysis-trend-stable { color: var(--text-secondary); }
+
+.vanalysis-sample {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.vanalysis-empty {
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.vanalysis-pb-detail {
+  font-size: 0.85rem;
+  color: var(--accent-secondary);
+  line-height: 1.5;
+}
+
+.vanalysis-feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vanalysis-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.vanalysis-feedback-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.vanalysis-feedback-strength {
+  background: rgba(0, 224, 208, 0.1);
+  color: var(--accent-primary);
+}
+
+.vanalysis-feedback-weakness {
+  background: rgba(255, 184, 48, 0.1);
+  color: var(--accent-secondary);
+}
+
+.vanalysis-feedback-suggestion {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.vanalysis-feedback-text {
+  flex: 1;
+}
+
+.vanalysis-recommendation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vanalysis-rec-exercise {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  letter-spacing: 0.04em;
+}
+
+.vanalysis-rec-reason {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .vanalysis-section {
+    max-width: 100%;
+  }
+  .vanalysis-metrics {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .vanalysis-trend-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
 
 /* ============================================
    Training HUD, pause menu & settings (in-session UI)
