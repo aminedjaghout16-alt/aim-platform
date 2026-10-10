@@ -249,9 +249,46 @@ VantageServices.DailyPlanService = {
     const durationMinutes = preferences.duration || 15;
     const planType = preferences.planType || 'recommended';
     const difficulty = preferences.difficulty || 'medium';
+    const benchmarkData = preferences.benchmarkData || null; // { categoryScores: { precision, tracking, reactive, switching } }
 
     // Analyze performance
     const analysis = await this._analyzePerformance(userId);
+
+    // If benchmark data is available, use it to boost weakness detection
+    if (benchmarkData && benchmarkData.categoryScores) {
+      if (!analysis.weaknesses) analysis.weaknesses = {};
+      if (!analysis.strengths) analysis.strengths = {};
+      
+      // Map benchmark categories to scenario categories
+      const categoryMap = {
+        precision: ['static-flicking', 'adjustshot-3d'],
+        tracking: ['strafe-tracking-3d', 'bot-strafe-3d'],
+        reactive: ['reactive-tracking-3d'],
+        switching: ['target-switching-3d'],
+      };
+
+      Object.keys(benchmarkData.categoryScores).forEach(cat => {
+        const score = benchmarkData.categoryScores[cat];
+        const scenarios = categoryMap[cat] || [];
+        scenarios.forEach(scenarioId => {
+          if (score < 50) {
+            // Weak category — boost weakness score
+            if (!analysis.weaknesses[scenarioId]) {
+              analysis.weaknesses[scenarioId] = { score: 0, metrics: {} };
+            }
+            analysis.weaknesses[scenarioId].score += 3;
+            analysis.weaknesses[scenarioId].metrics.benchmarkScore = score;
+          } else if (score >= 75) {
+            // Strong category
+            if (!analysis.strengths[scenarioId]) {
+              analysis.strengths[scenarioId] = { score: 0, metrics: {} };
+            }
+            analysis.strengths[scenarioId].metrics.benchmarkScore = score;
+          }
+        });
+      });
+      analysis.hasData = true;
+    }
 
     // Generate exercises
     let exercises;

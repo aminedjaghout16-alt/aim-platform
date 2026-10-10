@@ -7,7 +7,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete, activeDailyPlan, onDailyExerciseComplete }) {
+VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete, activeDailyPlan, onDailyExerciseComplete, activeBenchmark, onBenchmarkExerciseComplete }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const saveRef = useRef(onSaveResult);
@@ -227,6 +227,13 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             playlistCallbackFiredRef.current = true;
             setTimeout(() => {
               onDailyExerciseComplete(res);
+            }, 1500);
+          }
+          // If in benchmark mode, notify the parent
+          else if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete && !playlistCallbackFiredRef.current) {
+            playlistCallbackFiredRef.current = true;
+            setTimeout(() => {
+              onBenchmarkExerciseComplete(res);
             }, 1500);
           }
         })

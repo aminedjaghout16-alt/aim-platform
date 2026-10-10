@@ -184,6 +184,41 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid;
     }
 
+    // ─── Benchmarks ──────────────────────────────────────
+    match /benchmarks/{benchmarkId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.overallScore is number &&
+        request.resource.data.overallScore >= 0 &&
+        request.resource.data.overallScore <= 1000 &&
+        request.resource.data.status == 'completed';
+
+      allow update: if false; // Completed benchmarks are immutable
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // ─── Benchmark Attempts (incomplete) ─────────────────
+    match /benchmarkAttempts/{attemptId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'incomplete';
+
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        resource.data.status == 'incomplete';
+
+      allow delete: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

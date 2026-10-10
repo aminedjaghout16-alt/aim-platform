@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history', 'benchmark'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -25,6 +25,7 @@
     const [pendingWeaponSelect, setPendingWeaponSelect] = useState(null); // { scenarioId, config }
     const [activePlaylist, setActivePlaylist] = useState(null); // { items: [...], currentIndex: 0, results: [] }
     const [activeDailyPlan, setActiveDailyPlan] = useState(null); // { id, exercises, completedExercises, results, ... }
+    const [activeBenchmark, setActiveBenchmark] = useState(null); // { stageIndex, stageResult, completedStageIndex }
 
     // Auth listener — persistent sessions via Firebase
     useEffect(() => {
@@ -255,6 +256,35 @@
       setActiveDailyPlan(plan);
     }, []);
 
+    // Benchmark handlers
+    const handleBenchmarkStartExercise = useCallback(function(scenarioId, config, stageIndex) {
+      setActiveBenchmark({
+        stageIndex: stageIndex,
+        stageResult: null,
+        completedStageIndex: null,
+        isBenchmark: true,
+      });
+      setSelectedScenario(scenarioId);
+      setTrainingConfig(config);
+      setPendingWeaponSelect({ scenarioId: scenarioId, config: config });
+      navigate('weaponselect', scenarioId);
+    }, [navigate]);
+
+    const handleBenchmarkExerciseComplete = useCallback(function(result) {
+      if (!activeBenchmark || !activeBenchmark.isBenchmark) return;
+      // Mark this stage as complete with the result
+      setActiveBenchmark({
+        ...activeBenchmark,
+        stageResult: result,
+        completedStageIndex: activeBenchmark.stageIndex,
+      });
+    }, [activeBenchmark]);
+
+    const handleBenchmarkExit = useCallback(function() {
+      setActiveBenchmark(null);
+      navigate('benchmark');
+    }, [navigate]);
+
     // Show loading screen while checking auth state
     if (authLoading || page === null) {
       return e('div', { className: 'vlanding' },
@@ -320,6 +350,8 @@
             onPlaylistExerciseComplete: handlePlaylistExerciseComplete,
             activeDailyPlan: activeDailyPlan,
             onDailyExerciseComplete: handleDailyExerciseComplete,
+            activeBenchmark: activeBenchmark,
+            onBenchmarkExerciseComplete: handleBenchmarkExerciseComplete,
           });
         case 'results':
           return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, onQuickStart: handleQuickStart });
@@ -348,6 +380,14 @@
           });
         case 'daily-history':
           return e(VantagePages.DailyHistory, { user: user, onNavigate: navigate });
+        case 'benchmark':
+          return e(VantagePages.AimBenchmark, {
+            user: user,
+            onNavigate: navigate,
+            onStartExercise: handleBenchmarkStartExercise,
+            activeBenchmark: activeBenchmark,
+            onBenchmarkStageComplete: handleBenchmarkExerciseComplete,
+          });
         default:
           return e(VantagePages.Dashboard, { onNavigate: navigate, user: user });
       }
