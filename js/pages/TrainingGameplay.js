@@ -215,25 +215,25 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
         .then((info) => {
           setSaveInfo(info || null);
-          // If in playlist mode, notify the parent instead of showing results
-          if (activePlaylist && onPlaylistExerciseComplete && !playlistCallbackFiredRef.current) {
+          // Notify the parent for whichever mode started this exercise.
+          // Benchmark is checked FIRST: activeDailyPlan / activePlaylist can linger in
+          // app state after merely visiting those pages and must not hijack a benchmark.
+          if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete && !playlistCallbackFiredRef.current) {
+            playlistCallbackFiredRef.current = true;
+            setTimeout(() => {
+              onBenchmarkExerciseComplete(res);
+            }, 1500);
+          }
+          else if (activePlaylist && onPlaylistExerciseComplete && !playlistCallbackFiredRef.current) {
             playlistCallbackFiredRef.current = true; // Mark as fired to prevent duplicates
             setTimeout(() => {
               onPlaylistExerciseComplete(res);
             }, 1500); // Brief delay to show the results screen
           }
-          // If in daily plan mode, notify the parent
           else if (activeDailyPlan && onDailyExerciseComplete && !playlistCallbackFiredRef.current) {
             playlistCallbackFiredRef.current = true;
             setTimeout(() => {
               onDailyExerciseComplete(res);
-            }, 1500);
-          }
-          // If in benchmark mode, notify the parent
-          else if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete && !playlistCallbackFiredRef.current) {
-            playlistCallbackFiredRef.current = true;
-            setTimeout(() => {
-              onBenchmarkExerciseComplete(res);
             }, 1500);
           }
         })

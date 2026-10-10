@@ -93,6 +93,10 @@
       try {
         window.localStorage.setItem('vantage.trainingConfig.' + scenarioId, JSON.stringify(config || {}));
       } catch (err) { /* storage unavailable */ }
+      // A normal start must not be treated as part of any other mode
+      setActiveBenchmark(null);
+      setActiveDailyPlan(null);
+      setActivePlaylist(null);
       setSelectedScenario(scenarioId);
       setTrainingConfig(config);
       // Navigate to weapon selection before gameplay
@@ -152,6 +156,8 @@
 
     // Playlist handlers
     const handleCreatePlaylist = useCallback((playlistItems) => {
+      setActiveBenchmark(null);
+      setActiveDailyPlan(null);
       setActivePlaylist({
         items: playlistItems,
         currentIndex: 0,
@@ -186,6 +192,8 @@
     const handleStartNextPlaylistExercise = useCallback(() => {
       if (!activePlaylist) return;
       
+      setActiveBenchmark(null);
+      setActiveDailyPlan(null);
       const currentItem = activePlaylist.items[activePlaylist.currentIndex];
       const config = { duration: currentItem.duration, difficulty: currentItem.difficulty || 'medium' };
       setSelectedScenario(currentItem.id);
@@ -201,6 +209,8 @@
 
     // Daily Plan handlers
     const handleStartDailyExercise = useCallback((exercise, plan) => {
+      setActiveBenchmark(null);
+      setActivePlaylist(null);
       setActiveDailyPlan(plan);
       const config = { 
         duration: exercise.duration, 
@@ -262,6 +272,9 @@
     // local state. Shape: { isBenchmark, stageIndex, stageResults:{[stageId]:result},
     // startTime, stageResult (pending, not yet shown), completedStageIndex }
     const handleBenchmarkStartExercise = useCallback(function(scenarioId, config, stageIndex) {
+      // Benchmark must be the only active mode
+      setActivePlaylist(null);
+      setActiveDailyPlan(null);
       setActiveBenchmark(function(prev) {
         var fresh = stageIndex === 0 || !prev;
         return {
