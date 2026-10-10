@@ -3401,3 +3401,460 @@
     gap: 12px;
   }
 }
+
+/* ============================================
+   Daily Plan Styles
+   ============================================ */
+
+.vpage-dailyplan {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.vdailyplan-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.vdailyplan-date {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vdailyplan-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+  letter-spacing: 2px;
+}
+
+.vdailyplan-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.vseparator {
+  color: var(--border-subtle);
+}
+
+.vdailyplan-progress {
+  margin-bottom: 32px;
+}
+
+.vprogress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-base);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.vprogress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  transition: width 0.3s ease;
+}
+
+.vprogress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.vcompleted-badge {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.vdailyplan-config {
+  margin-bottom: 32px;
+}
+
+.vconfig-group {
+  margin-bottom: 24px;
+}
+
+.vconfig-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vconfig-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vconfig-option {
+  padding: 8px 16px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vconfig-option:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+}
+
+.vconfig-option.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--bg-base);
+}
+
+.vconfig-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.vdailyplan-exercises {
+  margin-bottom: 32px;
+}
+
+.vdailyplan-exercises h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+}
+
+.vexercise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vexercise-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  transition: all var(--transition-fast);
+}
+
+.vexercise-card:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-base);
+}
+
+.vexercise-card.completed {
+  opacity: 0.7;
+  border-color: var(--accent-primary);
+}
+
+.vexercise-card.current {
+  border-color: var(--accent-primary);
+  border-width: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 224, 208, 0.1);
+}
+
+.vexercise-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-base);
+  border-radius: 50%;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.vexercise-card.completed .vexercise-number {
+  background: var(--accent-primary);
+  color: var(--bg-base);
+}
+
+.vexercise-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vexercise-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.vexercise-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.vexercise-reason {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.vexercise-result {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+}
+
+.vexercise-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.vstatus-completed {
+  color: var(--accent-primary);
+}
+
+.vstatus-current {
+  color: var(--accent-primary);
+  animation: pulse 2s infinite;
+}
+
+.vstatus-pending {
+  color: var(--text-secondary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.vdailyplan-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+/* Daily History Styles */
+
+.vpage-dailyhistory {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.vdailyhistory-header {
+  margin-bottom: 32px;
+}
+
+.vdailyhistory-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+  letter-spacing: 2px;
+}
+
+.vstreak-info {
+  display: flex;
+  gap: 32px;
+  margin-top: 16px;
+}
+
+.vstreak-current,
+.vstreak-longest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.vstreak-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.vstreak-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vback-button {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-bottom: 16px;
+  transition: color var(--transition-fast);
+}
+
+.vback-button:hover {
+  color: var(--accent-secondary);
+}
+
+.vplan-detail {
+  margin-top: 16px;
+}
+
+.vplan-detail h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+}
+
+.vplan-meta {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.vhistory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vhistory-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.vhistory-card:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-base);
+}
+
+.vhistory-card.completed {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.vhistory-date {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  min-width: 100px;
+}
+
+.vhistory-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vhistory-type {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-transform: capitalize;
+}
+
+.vhistory-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vhistory-progress .vprogress-bar {
+  flex: 1;
+  max-width: 200px;
+}
+
+.vhistory-status {
+  font-size: 1.5rem;
+  color: var(--accent-primary);
+}
+
+/* Loading and Empty States */
+
+.vloading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 64px 24px;
+  color: var(--text-secondary);
+}
+
+.vspinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .vdailyplan-title {
+    font-size: 2rem;
+  }
+
+  .vconfig-options {
+    flex-direction: column;
+  }
+
+  .vconfig-option {
+    width: 100%;
+  }
+
+  .vexercise-card {
+    flex-direction: column;
+  }
+
+  .vexercise-status {
+    align-self: flex-end;
+  }
+
+  .vstreak-info {
+    flex-direction: column;
+    gap: 16px;
+  }
+}

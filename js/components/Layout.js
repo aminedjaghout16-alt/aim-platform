@@ -8,6 +8,7 @@ VantageComponents.Layout = function Layout({ children, currentPage, onNavigate, 
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '⬡' },
+    { id: 'daily', label: 'Daily Plan', icon: '📅' },
     { id: 'training', label: 'Training', icon: '◎' },
     { id: 'stats', label: 'Statistics', icon: '◈' },
     { id: 'leaderboard', label: 'Leaderboard', icon: '△' },

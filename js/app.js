@@ -10,7 +10,7 @@
   VantageServices.DatabaseService.init();
 
   // Pages that require authentication
-  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard'];
+  const PROTECTED_PAGES = ['dashboard', 'training', 'details', 'setup', 'weaponselect', 'gameplay', 'results', 'stats', 'profile', 'settings', 'playlist', 'leaderboard', 'daily', 'daily-history'];
   // Pages that should redirect to dashboard if already logged in
   const AUTH_PAGES = ['login', 'register'];
 
@@ -24,6 +24,7 @@
     const [latestResultId, setLatestResultId] = useState(null);
     const [pendingWeaponSelect, setPendingWeaponSelect] = useState(null); // { scenarioId, config }
     const [activePlaylist, setActivePlaylist] = useState(null); // { items: [...], currentIndex: 0, results: [] }
+    const [activeDailyPlan, setActiveDailyPlan] = useState(null); // { id, exercises, completedExercises, results, ... }
 
     // Auth listener — persistent sessions via Firebase
     useEffect(() => {
@@ -197,6 +198,63 @@
       navigate('training');
     }, [navigate]);
 
+    // Daily Plan handlers
+    const handleStartDailyExercise = useCallback((exercise, plan) => {
+      setActiveDailyPlan(plan);
+      const config = { 
+        duration: exercise.duration, 
+        difficulty: exercise.difficulty || 'medium' 
+      };
+      setSelectedScenario(exercise.scenarioId);
+      setTrainingConfig(config);
+      setPendingWeaponSelect({ scenarioId: exercise.scenarioId, config: config });
+      navigate('weaponselect', exercise.scenarioId);
+    }, [navigate]);
+
+    const handleDailyExerciseComplete = useCallback(async (result) => {
+      if (!activeDailyPlan) return;
+      
+      const currentIndex = activeDailyPlan.completedExercises.length;
+      if (currentIndex >= activeDailyPlan.exercises.length) return;
+
+      const newCompletedExercises = [...activeDailyPlan.completedExercises, currentIndex];
+      const newResults = [...activeDailyPlan.results, result];
+      
+      const isPlanComplete = newCompletedExercises.length === activeDailyPlan.exercises.length;
+      
+      const updates = {
+        completedExercises: newCompletedExercises,
+        results: newResults,
+      };
+
+      if (isPlanComplete) {
+        updates.status = 'completed';
+        updates.completedAt = new Date().toISOString();
+      }
+
+      try {
+        await VantageServices.DailyPlanService.updatePlanProgress(activeDailyPlan.id, updates);
+        setActiveDailyPlan({
+          ...activeDailyPlan,
+          ...updates,
+        });
+
+        // Navigate to next exercise or completion screen
+        if (!isPlanComplete) {
+          navigate('daily');
+        } else {
+          navigate('daily');
+        }
+      } catch (err) {
+        console.error('Failed to update daily plan:', err);
+        navigate('daily');
+      }
+    }, [activeDailyPlan, navigate]);
+
+    const handlePlanUpdate = useCallback((plan) => {
+      setActiveDailyPlan(plan);
+    }, []);
+
     // Show loading screen while checking auth state
     if (authLoading || page === null) {
       return e('div', { className: 'vlanding' },
@@ -260,6 +318,8 @@
             onSaveResult: handleSaveResult,
             activePlaylist: activePlaylist,
             onPlaylistExerciseComplete: handlePlaylistExerciseComplete,
+            activeDailyPlan: activeDailyPlan,
+            onDailyExerciseComplete: handleDailyExerciseComplete,
           });
         case 'results':
           return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, onQuickStart: handleQuickStart });
@@ -278,6 +338,16 @@
           return e(VantagePages.Settings, { onNavigate: navigate, user: user, onLogout: handleLogout });
         case 'leaderboard':
           return e(VantagePages.Leaderboard, { onNavigate: navigate, user: user });
+        case 'daily':
+          return e(VantagePages.DailyPlan, { 
+            user: user, 
+            onNavigate: navigate, 
+            onStartExercise: handleStartDailyExercise,
+            activeDailyPlan: activeDailyPlan,
+            onPlanUpdate: handlePlanUpdate,
+          });
+        case 'daily-history':
+          return e(VantagePages.DailyHistory, { user: user, onNavigate: navigate });
         default:
           return e(VantagePages.Dashboard, { onNavigate: navigate, user: user });
       }

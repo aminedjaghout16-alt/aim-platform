@@ -7,7 +7,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete }) {
+VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, onNavigate, onFinish, onSaveResult, activePlaylist, onPlaylistExerciseComplete, activeDailyPlan, onDailyExerciseComplete }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const saveRef = useRef(onSaveResult);
@@ -221,6 +221,13 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
             setTimeout(() => {
               onPlaylistExerciseComplete(res);
             }, 1500); // Brief delay to show the results screen
+          }
+          // If in daily plan mode, notify the parent
+          else if (activeDailyPlan && onDailyExerciseComplete && !playlistCallbackFiredRef.current) {
+            playlistCallbackFiredRef.current = true;
+            setTimeout(() => {
+              onDailyExerciseComplete(res);
+            }, 1500);
           }
         })
         .catch((err) => console.error('[Gameplay] Failed to save result', err));
