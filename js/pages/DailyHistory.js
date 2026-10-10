@@ -8,6 +8,8 @@ VantagePages.DailyHistory = function DailyHistory({ user, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [streakInfo, setStreakInfo] = useState(null);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const DailyPlanService = VantageServices.DailyPlanService;
 
@@ -17,6 +19,7 @@ VantagePages.DailyHistory = function DailyHistory({ user, onNavigate }) {
     async function loadHistory() {
       try {
         setLoading(true);
+        setError(null);
         const [planHistory, streak] = await Promise.all([
           DailyPlanService.getPlanHistory(user.uid, 30),
           DailyPlanService.getStreakInfo(user.uid),
@@ -24,14 +27,15 @@ VantagePages.DailyHistory = function DailyHistory({ user, onNavigate }) {
         setHistory(planHistory);
         setStreakInfo(streak);
       } catch (err) {
-        console.error('Failed to load history:', err);
+        console.error('Failed to load history:', err && err.code, err && err.message, err);
+        setError('Could not load your training history' + (err && err.code ? ' (' + err.code + ')' : '') + '. ' + ((err && err.message) || ''));
       } finally {
         setLoading(false);
       }
     }
 
     loadHistory();
-  }, [user]);
+  }, [user, reloadKey]);
 
   if (loading) {
     return e('div', { className: 'vpage-dailyhistory' },
@@ -39,6 +43,20 @@ VantagePages.DailyHistory = function DailyHistory({ user, onNavigate }) {
         e('div', { className: 'vspinner' }),
         e('p', null, 'Loading history...'),
       ),
+    );
+  }
+
+  if (error) {
+    return e('div', { className: 'vpage-dailyhistory' },
+      e(VantageUI.EmptyState, {
+        icon: '⚠',
+        title: 'Could not load history',
+        description: error,
+        action: e(VantageUI.Button, {
+          variant: 'primary',
+          onClick: () => setReloadKey(k => k + 1),
+        }, 'TRY AGAIN'),
+      }),
     );
   }
 

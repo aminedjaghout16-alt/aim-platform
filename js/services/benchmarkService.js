@@ -81,32 +81,46 @@ VantageServices.BenchmarkService = {
     }
   },
 
+  // NOTE: the queries below filter by userId only and filter/sort on the client.
+  // Combining userId + status + orderBy needs composite indexes; when they are not
+  // deployed the query throws and the whole benchmark page fails to load.
+  _ts(v) {
+    if (!v) return 0;
+    if (typeof v.toMillis === 'function') return v.toMillis();
+    var t = new Date(v).getTime();
+    return isNaN(t) ? 0 : t;
+  },
+
   // Get latest incomplete attempt
   async getLatestIncompleteAttempt(userId) {
     var db = this._db();
+    var self = this;
     var snap = await db.collection('benchmarkAttempts')
       .where('userId', '==', userId)
-      .where('status', '==', 'incomplete')
-      .orderBy('startedAt', 'desc')
-      .limit(1)
       .get();
-    if (snap.empty) return null;
-    var doc = snap.docs[0];
-    return { id: doc.id, ...doc.data() };
+    var items = [];
+    snap.forEach(function(doc) {
+      var d = doc.data();
+      if (d.status === 'incomplete') items.push({ id: doc.id, ...d });
+    });
+    if (!items.length) return null;
+    items.sort(function(x, y) { return self._ts(y.startedAt) - self._ts(x.startedAt); });
+    return items[0];
   },
 
-  // Get all completed benchmarks for a user
+  // Get all completed benchmarks for a user (newest first)
   async getUserBenchmarks(userId) {
     var db = this._db();
+    var self = this;
     var snap = await db.collection('benchmarks')
       .where('userId', '==', userId)
-      .where('status', '==', 'completed')
-      .orderBy('timestamp', 'desc')
       .get();
     var results = [];
     snap.forEach(function(doc) {
-      results.push({ id: doc.id, ...doc.data() });
+      var d = doc.data();
+      if (d.status === 'completed') results.push({ id: doc.id, ...d });
     });
+    results.sort(function(x, y) { return self._ts(y.timestamp) - self._ts(x.timestamp); });
     return results;
   },
 
@@ -120,44 +134,21 @@ VantageServices.BenchmarkService = {
 
   // Get the latest completed benchmark
   async getLatestBenchmark(userId) {
-    var db = this._db();
-    var snap = await db.collection('benchmarks')
-      .where('userId', '==', userId)
-      .where('status', '==', 'completed')
-      .orderBy('timestamp', 'desc')
-      .limit(1)
-      .get();
-    if (snap.empty) return null;
-    var doc = snap.docs[0];
-    return { id: doc.id, ...doc.data() };
+    var all = await this.getUserBenchmarks(userId);
+    return all.length ? all[0] : null;
   },
 
   // Get the highest scoring benchmark
   async getBestBenchmark(userId) {
-    var db = this._db();
-    var snap = await db.collection('benchmarks')
-      .where('userId', '==', userId)
-      .where('status', '==', 'completed')
-      .orderBy('overallScore', 'desc')
-      .limit(1)
-      .get();
-    if (snap.empty) return null;
-    var doc = snap.docs[0];
-    return { id: doc.id, ...doc.data() };
+    var all = await this.getUserBenchmarks(userId);
+    if (!all.length) return null;
+    return all.reduce(function(p, c) { return (c.overallScore > p.overallScore) ? c : p; }, all[0]);
   },
 
   // Get the previous completed benchmark (second most recent)
   async getPreviousBenchmark(userId) {
-    var db = this._db();
-    var snap = await db.collection('benchmarks')
-      .where('userId', '==', userId)
-      .where('status', '==', 'completed')
-      .orderBy('timestamp', 'desc')
-      .limit(2)
-      .get();
-    if (snap.size < 2) return null;
-    var doc = snap.docs[1];
-    return { id: doc.id, ...doc.data() };
+    var all = await this.getUserBenchmarks(userId);
+    return all.length > 1 ? all[1] : null;
   },
 
   // Get benchmark summary (latest, best, previous)

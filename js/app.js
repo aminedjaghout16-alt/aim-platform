@@ -257,12 +257,21 @@
     }, []);
 
     // Benchmark handlers
+    // NOTE: AimBenchmark unmounts while a stage is played (weapon select + gameplay
+    // are different pages), so ALL benchmark progress lives here, not in the page's
+    // local state. Shape: { isBenchmark, stageIndex, stageResults:{[stageId]:result},
+    // startTime, stageResult (pending, not yet shown), completedStageIndex }
     const handleBenchmarkStartExercise = useCallback(function(scenarioId, config, stageIndex) {
-      setActiveBenchmark({
-        stageIndex: stageIndex,
-        stageResult: null,
-        completedStageIndex: null,
-        isBenchmark: true,
+      setActiveBenchmark(function(prev) {
+        var fresh = stageIndex === 0 || !prev;
+        return {
+          isBenchmark: true,
+          stageIndex: stageIndex,
+          stageResults: fresh ? {} : (prev.stageResults || {}),
+          startTime: fresh ? Date.now() : (prev.startTime || Date.now()),
+          stageResult: null,
+          completedStageIndex: null,
+        };
       });
       setSelectedScenario(scenarioId);
       setTrainingConfig(config);
@@ -271,14 +280,35 @@
     }, [navigate]);
 
     const handleBenchmarkExerciseComplete = useCallback(function(result) {
-      if (!activeBenchmark || !activeBenchmark.isBenchmark) return;
-      // Mark this stage as complete with the result
-      setActiveBenchmark({
-        ...activeBenchmark,
-        stageResult: result,
-        completedStageIndex: activeBenchmark.stageIndex,
+      setActiveBenchmark(function(prev) {
+        if (!prev || !prev.isBenchmark) return prev;
+        var idx = prev.stageIndex;
+        var stage = VantageEngine.BenchmarkConfig.STAGES[idx];
+        if (!stage) return prev;
+        var newResults = Object.assign({}, prev.stageResults || {});
+        newResults[stage.id] = result;
+        return Object.assign({}, prev, {
+          stageResults: newResults,
+          stageResult: result,
+          completedStageIndex: idx,
+        });
       });
-    }, [activeBenchmark]);
+      // Go back to the benchmark page, which shows the stage result / next stage
+      navigate('benchmark');
+    }, [navigate]);
+
+    // Called by AimBenchmark once it has displayed a finished stage, so the
+    // pending result is not processed twice (stageResults are kept).
+    const handleBenchmarkStageConsumed = useCallback(function() {
+      setActiveBenchmark(function(prev) {
+        if (!prev) return prev;
+        return Object.assign({}, prev, { stageResult: null });
+      });
+    }, []);
+
+    const handleBenchmarkAbandon = useCallback(function() {
+      setActiveBenchmark(null);
+    }, []);
 
     const handleBenchmarkExit = useCallback(function() {
       setActiveBenchmark(null);
@@ -386,7 +416,8 @@
             onNavigate: navigate,
             onStartExercise: handleBenchmarkStartExercise,
             activeBenchmark: activeBenchmark,
-            onBenchmarkStageComplete: handleBenchmarkExerciseComplete,
+            onBenchmarkStageConsumed: handleBenchmarkStageConsumed,
+            onBenchmarkAbandon: handleBenchmarkAbandon,
           });
         default:
           return e(VantagePages.Dashboard, { onNavigate: navigate, user: user });

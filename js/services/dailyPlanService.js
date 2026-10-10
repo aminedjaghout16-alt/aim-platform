@@ -336,21 +336,30 @@ VantageServices.DailyPlanService = {
     return plan;
   },
 
-  // Get today's plan
+  // Get today's plan.
+  // Only ONE equality filter (userId) is sent to Firestore. Combining
+  // where('userId') + where('date') needs a composite index; if it is missing the
+  // query throws and no plan can ever be created. We filter the date client-side.
   async getTodayPlan(userId) {
     const db = VantageServices.DatabaseService._db();
     const todayKey = this._getTodayKey();
-    
+
     const snap = await db.collection('dailyPlans')
       .where('userId', '==', userId)
-      .where('date', '==', todayKey)
-      .limit(1)
       .get();
 
-    if (snap.empty) return null;
-    
-    const doc = snap.docs[0];
-    return { id: doc.id, ...doc.data() };
+    const todays = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      if (data.date === todayKey) todays.push({ id: doc.id, ...data });
+    });
+    if (!todays.length) return null;
+
+    // Regenerating creates another plan for the same day: use the newest one
+    // (ids look like plan_<timestamp>).
+    const stamp = (p) => parseInt(String(p.id).replace(/\D/g, ''), 10) || 0;
+    todays.sort((x, y) => stamp(y) - stamp(x));
+    return todays[0];
   },
 
   // Update plan progress
@@ -359,18 +368,18 @@ VantageServices.DailyPlanService = {
     await db.collection('dailyPlans').doc(planId).update(updates);
   },
 
-  // Get plan history
+  // Get plan history (newest first). Sorted client-side so no composite index
+  // (userId + date) is required.
   async getPlanHistory(userId, limit = 30) {
     const db = VantageServices.DatabaseService._db();
     const snap = await db.collection('dailyPlans')
       .where('userId', '==', userId)
-      .orderBy('date', 'desc')
-      .limit(limit)
       .get();
 
     const plans = [];
     snap.forEach(doc => plans.push({ id: doc.id, ...doc.data() }));
-    return plans;
+    plans.sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+    return plans.slice(0, limit);
   },
 
   // Get streak info

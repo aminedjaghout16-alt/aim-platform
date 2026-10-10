@@ -36,8 +36,8 @@ VantagePages.DailyPlan = function DailyPlan({ user, onNavigate, onStartExercise,
         setPlan(todayPlan);
         if (onPlanUpdate) onPlanUpdate(todayPlan);
       } catch (err) {
-        console.error('Failed to load daily plan:', err);
-        setError('Failed to load your daily plan. Please try again.');
+        console.error('Failed to load daily plan:', err && err.code, err && err.message, err);
+        setError('Failed to load your daily plan' + (err && err.code ? ' (' + err.code + ')' : '') + '. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -65,8 +65,8 @@ VantagePages.DailyPlan = function DailyPlan({ user, onNavigate, onStartExercise,
       setPlan(newPlan);
       if (onPlanUpdate) onPlanUpdate(newPlan);
     } catch (err) {
-      console.error('Failed to regenerate plan:', err);
-      setError('Failed to regenerate plan. Please try again.');
+      console.error('Failed to regenerate plan:', err && err.code, err && err.message, err);
+      setError('Failed to regenerate plan' + (err && err.code ? ' (' + err.code + ')' : '') + '. Please try again.');
     } finally {
       setGenerating(false);
     }

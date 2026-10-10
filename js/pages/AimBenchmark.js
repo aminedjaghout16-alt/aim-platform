@@ -4,7 +4,7 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExercise, activeBenchmark, onBenchmarkStageComplete }) {
+VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExercise, activeBenchmark, onBenchmarkStageConsumed, onBenchmarkAbandon }) {
   var uid = user ? user.uid : null;
   var BConfig = VantageEngine.BenchmarkConfig;
   var BService = VantageServices.BenchmarkService;
@@ -24,11 +24,16 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
   var error = _err[0], setError = _err[1];
 
   // Benchmark execution state
-  var _stageIdx = useState(0);
+  // This page remounts after every stage (gameplay is a different page), so the
+  // initial values are restored from the app-level activeBenchmark progress.
+  var _stageIdx = useState(function() {
+    if (!activeBenchmark) return 0;
+    return activeBenchmark.completedStageIndex != null ? activeBenchmark.completedStageIndex : (activeBenchmark.stageIndex || 0);
+  });
   var stageIndex = _stageIdx[0], setStageIndex = _stageIdx[1];
-  var _stageResults = useState({});
+  var _stageResults = useState(function() { return (activeBenchmark && activeBenchmark.stageResults) || {}; });
   var stageResults = _stageResults[0], setStageResults = _stageResults[1];
-  var _benchStart = useState(null);
+  var _benchStart = useState(function() { return (activeBenchmark && activeBenchmark.startTime) || null; });
   var benchmarkStartTime = _benchStart[0], setBenchmarkStartTime = _benchStart[1];
   var _saving = useState(false);
   var saving = _saving[0], setSaving = _saving[1];
@@ -50,6 +55,15 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
   // Refs for preventing duplicate operations
   var savingRef = useRef(false);
   var startedRef = useRef(false);
+  var timerRef = useRef(null);
+  var stageIndexRef = useRef(stageIndex);
+  stageIndexRef.current = stageIndex;
+  var launchRef = useRef(null); // always points at the latest launchStage (no stale closures)
+
+  // Never leave a countdown running after leaving the page
+  useEffect(function() {
+    return function() { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
 
   // Load benchmark data
   useEffect(function() {
@@ -76,31 +90,36 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
     return function() { cancelled = true; };
   }, [uid]);
 
-  // Handle benchmark stage completion from gameplay
+  // Handle benchmark stage completion from gameplay.
+  // The result + all earlier results come from app-level state (activeBenchmark).
   useEffect(function() {
     if (!activeBenchmark || !activeBenchmark.stageResult) return;
     if (savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
 
     var result = activeBenchmark.stageResult;
     var idx = activeBenchmark.completedStageIndex;
-    var newResults = Object.assign({}, stageResults);
+    if (idx == null || !BConfig.STAGES[idx]) return;
+    var newResults = Object.assign({}, activeBenchmark.stageResults || {});
     newResults[BConfig.STAGES[idx].id] = result;
+    var startTime = activeBenchmark.startTime || benchmarkStartTime;
+
+    // Mark the stage as completed locally AND tell the app we consumed it
+    setStageIndex(idx);
+    stageIndexRef.current = idx;
     setStageResults(newResults);
     setLastResult(result);
+    if (startTime) setBenchmarkStartTime(startTime);
+    if (onBenchmarkStageConsumed) onBenchmarkStageConsumed();
 
-    // Check if all stages are done
     if (BConfig.isBenchmarkComplete(newResults)) {
-      // Build final result and save
+      savingRef.current = true;
+      setSaving(true);
       var finalResult = BConfig.buildBenchmarkResult(newResults);
-      var duration = benchmarkStartTime ? Math.round((Date.now() - benchmarkStartTime) / 1000) : 0;
-      finalResult.duration = duration;
+      finalResult.duration = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
 
       BService.saveBenchmark(uid, finalResult).then(function(saved) {
         setLastResult(saved);
         setView('final-result');
-        // Refresh summary
         return BService.getBenchmarkSummary(uid);
       }).then(function(s) {
         setSummary(s);
@@ -109,48 +128,53 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
         setHistory(h || []);
         setSaving(false);
         savingRef.current = false;
+        if (onBenchmarkAbandon) onBenchmarkAbandon(); // benchmark finished: clear progress
       }).catch(function(err) {
-        console.error('[Benchmark] Save error:', err);
-        setError('Failed to save benchmark results. Please try again.');
+        console.error('[Benchmark] Save error:', err && err.code, err && err.message, err);
+        setError('Failed to save benchmark results' + (err && err.code ? ' (' + err.code + ')' : '') + '. Please try again.');
         setSaving(false);
         savingRef.current = false;
       });
     } else {
-      // Move to next stage transition
       setView('stage-result');
-      setSaving(false);
-      savingRef.current = false;
     }
   }, [activeBenchmark]);
 
-  // Start benchmark
-  var handleStartBenchmark = useCallback(function() {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    setStageIndex(0);
-    setStageResults({});
-    setLastResult(null);
-    setBenchmarkStartTime(Date.now());
+  // Run a 3-2-1 countdown, then launch the given stage
+  var runCountdown = useCallback(function(idx) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    stageIndexRef.current = idx;
+    setStageIndex(idx);
     setView('countdown');
     setCountdown(3);
-
     var count = 3;
-    var timer = setInterval(function() {
+    timerRef.current = setInterval(function() {
       count--;
       if (count <= 0) {
-        clearInterval(timer);
+        clearInterval(timerRef.current);
+        timerRef.current = null;
         startedRef.current = false;
-        // Launch first stage
-        launchStage(0);
+        if (launchRef.current) launchRef.current(idx);
       } else {
         setCountdown(count);
       }
     }, 1000);
   }, []);
 
+  // Start benchmark
+  var handleStartBenchmark = useCallback(function() {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStageResults({});
+    setLastResult(null);
+    setBenchmarkStartTime(Date.now());
+    runCountdown(0);
+  }, [runCountdown]);
+
   // Launch a specific stage
   var launchStage = useCallback(function(idx) {
     if (idx >= BConfig.STAGES.length) return;
+    stageIndexRef.current = idx;
     setStageIndex(idx);
     setView('playing');
     var stage = BConfig.STAGES[idx];
@@ -164,25 +188,15 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
       onStartExercise(stage.scenarioId, config, idx);
     }
   }, [onStartExercise]);
+  launchRef.current = launchStage;
 
   // Continue to next stage after seeing stage result
   var handleContinueToNextStage = useCallback(function() {
-    var nextIdx = stageIndex + 1;
+    var nextIdx = stageIndexRef.current + 1;
     if (nextIdx < BConfig.STAGES.length) {
-      setView('countdown');
-      setCountdown(3);
-      var count = 3;
-      var timer = setInterval(function() {
-        count--;
-        if (count <= 0) {
-          clearInterval(timer);
-          launchStage(nextIdx);
-        } else {
-          setCountdown(count);
-        }
-      }, 1000);
+      runCountdown(nextIdx);
     }
-  }, [stageIndex, launchStage]);
+  }, [runCountdown]);
 
   // Abandon benchmark
   var handleAbandonBenchmark = useCallback(function() {
@@ -191,7 +205,9 @@ VantagePages.AimBenchmark = function AimBenchmark({ user, onNavigate, onStartExe
     setStageResults({});
     setLastResult(null);
     startedRef.current = false;
-  }, []);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (onBenchmarkAbandon) onBenchmarkAbandon();
+  }, [onBenchmarkAbandon]);
 
   // View history detail
   var handleViewDetail = useCallback(function(bench) {
