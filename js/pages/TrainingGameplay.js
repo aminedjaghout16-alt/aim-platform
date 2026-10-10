@@ -210,21 +210,25 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
         res.grade = adjustshotScore.grade.letter;
         res.isAdjustshotMode = true;
       }
+      // BENCHMARK MODE: no regular results screen. Save the result in the
+      // background and hand it straight to the benchmark flow, which shows its own
+      // stage progress and countdown.
+      if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete) {
+        if (!playlistCallbackFiredRef.current) {
+          playlistCallbackFiredRef.current = true;
+          Promise.resolve(saveRef.current ? saveRef.current(res) : null)
+            .catch((err) => console.error('[Gameplay] Failed to save benchmark stage result', err));
+          onBenchmarkExerciseComplete(res);
+        }
+        return;
+      }
       setResult(res);
       // Save the real result immediately so it is never lost
       Promise.resolve(saveRef.current ? saveRef.current(res) : null)
         .then((info) => {
           setSaveInfo(info || null);
-          // Notify the parent for whichever mode started this exercise.
-          // Benchmark is checked FIRST: activeDailyPlan / activePlaylist can linger in
-          // app state after merely visiting those pages and must not hijack a benchmark.
-          if (activeBenchmark && activeBenchmark.isBenchmark && onBenchmarkExerciseComplete && !playlistCallbackFiredRef.current) {
-            playlistCallbackFiredRef.current = true;
-            setTimeout(() => {
-              onBenchmarkExerciseComplete(res);
-            }, 1500);
-          }
-          else if (activePlaylist && onPlaylistExerciseComplete && !playlistCallbackFiredRef.current) {
+          // Notify the parent for playlist / daily plan modes (benchmark is handled above).
+          if (activePlaylist && onPlaylistExerciseComplete && !playlistCallbackFiredRef.current) {
             playlistCallbackFiredRef.current = true; // Mark as fired to prevent duplicates
             setTimeout(() => {
               onPlaylistExerciseComplete(res);
@@ -569,6 +573,16 @@ VantagePages.TrainingGameplay = function TrainingGameplay({ scenarioId, config, 
   }
 
   // ---- Results screen ----
+  if (engineState === 'finished' && activeBenchmark && activeBenchmark.isBenchmark) {
+    // Benchmark: skip the regular results screen entirely
+    return e('div', { className: 'vpage-gameplay vpage-results-overlay' },
+      e('div', { style: { textAlign: 'center', color: 'var(--text-secondary)' } },
+        e('div', { className: 'vspinner' }),
+        e('div', { style: { marginTop: '12px' } }, 'Stage complete…'),
+      ),
+    );
+  }
+
   if (engineState === 'finished' && result) {
     var grade = VantageEngine.Scoring.getGrade(result.score) || {};
     var cfg = result.config || {};
