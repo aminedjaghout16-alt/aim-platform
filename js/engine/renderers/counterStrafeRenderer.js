@@ -12,11 +12,15 @@
 VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer extends VantageEngine.Renderers.ThreeArenaRenderer {
 
   // ─── Movement Physics Constants ──────────────────────
+  // Tuned for Valorant-like responsiveness:
+  //   Natural stop from max speed: 5.5 / 80 ≈ 69 ms
+  //   Counter-strafe stop:         5.5 / 140 ≈ 39 ms
+  //   + 50 ms settling             → total 89–119 ms
   static MOVE_MAX_SPEED     = 5.5;   // units/sec max strafe speed
-  static MOVE_ACCEL         = 45.0;  // units/sec² acceleration when key held
-  static MOVE_DECEL         = 35.0;  // units/sec² natural deceleration (no key)
-  static MOVE_COUNTER_DECEL = 70.0;  // units/sec² counter-strafe deceleration
-  static MOVE_STOP_THRESHOLD = 0.15; // below this speed = "stopped"
+  static MOVE_ACCEL         = 50.0;  // units/sec² acceleration when key held
+  static MOVE_DECEL         = 80.0;  // units/sec² natural deceleration (key release)
+  static MOVE_COUNTER_DECEL = 140.0; // units/sec² counter-strafe deceleration
+  static MOVE_STOP_THRESHOLD = 0.1;  // below this speed = "stopped"
   static MOVE_BOUNDARY      = 12.0;  // max radial offset from arena center
   static CAMERA_BASE_Y      = 1.7;   // eye height
   static MOVE_BOB_AMOUNT    = 0.018; // subtle vertical bob while moving
@@ -39,7 +43,7 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     this._moveState = 'stopped';
     this._moveDirection = 0;
     this._settlingUntil = 0;
-    this._settlingDuration = 150;
+    this._settlingDuration = 50;  // ms — brief settling after physical stop
 
     // ─── Shot statistics ───────────────────────────────
     this._shotsFired = 0;
