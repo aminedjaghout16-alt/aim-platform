@@ -13,6 +13,9 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   static PEEK_BOUNDARY_MIN = -3.5;  // min X offset (can't go through left cover)
   static PEEK_BOUNDARY_MAX = 3.5;   // max X offset (can't go through right cover)
 
+  // Minimum scale for humanoid bots so they are always visible at training distances
+  static BOT_MIN_SCALE = 1.8;
+
   constructor(canvas, scenario, config) {
     super(canvas, scenario, config);
 
@@ -27,17 +30,27 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._rounds = [];
     this._currentRound = 0;
     this._totalRounds = 5;
-    this._reactionWindow = 2000;
+    this._reactionWindow = 2000;  // ms — time before penalty
 
     this._peeksPerformed = 0;
     this._targetsEliminated = 0;
     this._damageTaken = 0;
-    this._eliminationTimes = [];
-    this._exposureTimes = [];
+    this._eliminationTimes = [];  // ms from reveal to elimination (valid engagements only)
+    this._totalExposureMs = 0;   // cumulative ms targets were visible
 
     this._roundActive = false;
     this._roundTargets = [];
     this._roundStartTime = 0;
+
+    // ─── Scoring state (authoritative) ─────────────────
+    this._totalTargetsSpawned = 0;
+    this._missCount = 0;
+
+    // ─── Timer management ──────────────────────────────
+    this._pendingTimeouts = [];    // tracked setTimeout IDs for cancellation
+    this._roundId = 0;             // monotonically increasing; invalidates stale callbacks
+    this._pauseTime = 0;           // Date.now() when pause began (0 = not paused)
+    this._pausedTotalMs = 0;       // accumulated paused duration for this session
 
     // ─── Difficulty settings ───────────────────────────
     var S = VantageEngine.Settings;
@@ -56,11 +69,6 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     }
 
     // ─── Lane configuration ────────────────────────────
-    // Three lanes: left, center, right
-    // Cover walls are narrow pillars that block the view until peeked around
-    // Player starts at z=0, can peek left/right
-    // Layout: cover at z=-8, targets at z=-14
-    // Covers are narrow so peeking reveals targets
     this._lanePositions = [
       { x: -5, z: -14, coverX: -3, coverZ: -8, coverWidth: 1.2 },  // Left lane
       { x: 0,  z: -16, coverX: 0,  coverZ: -8, coverWidth: 1.2 },  // Center lane
@@ -82,19 +90,26 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._stopIdleLoop();
     this._resetRecoil();
     this.running = true;
+    this._stopped = false;
     this._hitCount = 0;
     this._sessionStartTime = Date.now();
     this._peeksPerformed = 0;
     this._targetsEliminated = 0;
     this._damageTaken = 0;
     this._eliminationTimes = [];
-    this._exposureTimes = [];
+    this._totalExposureMs = 0;
     this._currentRound = 0;
     this._roundTargets = [];
     this._roundActive = false;
     this._peekOffsetX = 0;
     this._peekTargetX = 0;
     this._keysDown = {};
+    this._totalTargetsSpawned = 0;
+    this._missCount = 0;
+    this._pendingTimeouts = [];
+    this._roundId = 0;
+    this._pauseTime = 0;
+    this._pausedTotalMs = 0;
 
     document.addEventListener('keydown', this._onKeyDown);
     document.addEventListener('keyup', this._onKeyUp);
@@ -107,22 +122,128 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   pause() {
     this._keysDown = {};
     this._peekTargetX = 0;
+    this._pauseTime = Date.now();
+    // Cancel all pending timeouts — they will not be re-created on resume
+    // because the round state is frozen.
+    this._cancelAllPendingTimeouts();
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.pause.call(this);
   }
 
   resume() {
+    // Calculate how long we were paused
+    var pausedMs = 0;
+    if (this._pauseTime) {
+      pausedMs = Date.now() - this._pauseTime;
+      this._pausedTotalMs += pausedMs;
+    }
+
+    // Shift ALL time-dependent timestamps forward so elapsed-time calculations
+    // (which use Date.now() - timestamp) remain correct after a pause.
+    if (pausedMs > 0) {
+      this._sessionStartTime += pausedMs;
+      this._roundStartTime += pausedMs;
+      for (var i = 0; i < this._roundTargets.length; i++) {
+        var t = this._roundTargets[i];
+        if (t.spawnTime) t.spawnTime += pausedMs;
+        if (t.revealTime) t.revealTime += pausedMs;
+      }
+    }
+
+    this._pauseTime = 0;
+
+    // Prevent the parent from double-shifting timestamps and from spawning
+    // its own single-target (we manage rounds ourselves).
+    this._pauseStart = 0;
+
+    // Determine round state before calling parent resume (which may call _spawnTarget)
+    var aliveInRound = 0;
+    var deadInRound = 0;
+    for (var k = 0; k < this._roundTargets.length; k++) {
+      if (this._roundTargets[k].alive) aliveInRound++;
+      else deadInRound++;
+    }
+    var roundWasComplete = this._roundActive && aliveInRound === 0;
+
+    // Temporarily override running to prevent parent's _spawnTarget from acting
+    var wasRunning = this.running;
+    this.running = false;
+
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.resume.call(this);
+
+    // Restore running state
+    this.running = wasRunning || true;
+
+    // Remove any stray targets the parent may have spawned
+    for (var j = this._targets.length - 1; j >= 0; j--) {
+      if (this._roundTargets.indexOf(this._targets[j]) === -1) {
+        var extra = this._targets[j];
+        if (extra.mesh && extra.mesh.parent) extra.mesh.parent.remove(extra.mesh);
+        this._targets.splice(j, 1);
+      }
+    }
+
+    // Clean up dead targets whose removal timeouts were cancelled during pause
+    for (var m = this._roundTargets.length - 1; m >= 0; m--) {
+      var rt = this._roundTargets[m];
+      if (!rt.alive && rt.hitAnim <= 0) {
+        var idx = this._targets.indexOf(rt);
+        if (idx !== -1) this._targets.splice(idx, 1);
+        if (rt.mesh.parent) rt.mesh.parent.remove(rt.mesh);
+        this._roundTargets.splice(m, 1);
+      }
+    }
+
+    // Re-evaluate round completion: if the round was complete (or became complete
+    // while dead targets were being cleaned), start the next round after a short delay.
+    var aliveAfter = 0;
+    for (var n = 0; n < this._roundTargets.length; n++) {
+      if (this._roundTargets[n].alive) aliveAfter++;
+    }
+    if (this._roundActive && aliveAfter === 0) {
+      // Round is complete — transition to next round
+      this._roundActive = false;
+      var capturedRoundId = this._roundId;
+      var self = this;
+      this._scheduleTimeout(function() {
+        if (self._stopped) return;
+        if (self._roundId !== capturedRoundId) return;
+        self._startNextRound();
+      }, 800);
+    }
+  }
+
+  // Override parent's _spawnTarget to prevent it from spawning sphere targets
+  // in PeekEliminate mode (we manage our own round-based spawning).
+  _spawnTarget() {
+    // No-op: PeekEliminate uses _spawnRoundTarget via _startNextRound
   }
 
   stop() {
     document.removeEventListener('keydown', this._onKeyDown);
     document.removeEventListener('keyup', this._onKeyUp);
     window.removeEventListener('blur', this._onBlur);
+    this._cancelAllPendingTimeouts();
     this._clearRoundTargets();
     this._keysDown = {};
+    this._pauseTime = 0;
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
     this._coverWalls = [];
     this._roundTargets = [];
+  }
+
+  // ─── Timeout Management ──────────────────────────────
+
+  _scheduleTimeout(fn, delayMs) {
+    var id = setTimeout(fn, delayMs);
+    this._pendingTimeouts.push(id);
+    return id;
+  }
+
+  _cancelAllPendingTimeouts() {
+    for (var i = 0; i < this._pendingTimeouts.length; i++) {
+      clearTimeout(this._pendingTimeouts[i]);
+    }
+    this._pendingTimeouts = [];
   }
 
   // ─── Input Safety ────────────────────────────────────
@@ -248,12 +369,15 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   // ─── Round Management ────────────────────────────────
 
   _startNextRound() {
-    if (!this.running) return;
+    if (!this.running || this._stopped) return;
     this._currentRound++;
     if (this._currentRound > this._totalRounds) {
       this.running = false;
       return;
     }
+
+    // Increment round ID to invalidate any stale callbacks from previous rounds
+    this._roundId++;
 
     this._clearRoundTargets();
     this._roundActive = true;
@@ -261,6 +385,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
     var numTargets = 1 + Math.floor(Math.random() * 2);
     var usedLanes = [];
+    var capturedRoundId = this._roundId;
+    var self = this;
 
     for (var i = 0; i < numTargets; i++) {
       var laneIdx;
@@ -272,10 +398,11 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       var lane = this._lanePositions[laneIdx];
       var delay = i === 0 ? 0 : 400 + Math.random() * 600;
 
-      var self = this;
       (function(li, ln, d) {
-        setTimeout(function() {
+        self._scheduleTimeout(function() {
+          // Validate this callback is still for the current round
           if (!self.running || self._stopped) return;
+          if (self._roundId !== capturedRoundId) return;
           self._spawnRoundTarget(li, ln);
         }, d);
       })(laneIdx, lane, delay);
@@ -283,7 +410,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   }
 
   _spawnRoundTarget(laneIdx, lane) {
-    if (!this.running) return;
+    if (!this.running || this._stopped) return;
 
     var radius = this.targetBaseRadius;
     var botGroup = this._buildHumanoidBot(radius);
@@ -295,6 +422,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       radius: radius,
       spawnTime: Date.now(),
       alive: true,
+      scored: false,         // ensures one enemy awards points only once
       opacity: 0,
       hitAnim: 0,
       laneIdx: laneIdx,
@@ -305,6 +433,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
     this._roundTargets.push(target);
     this._targets.push(target);
+    this._totalTargetsSpawned++;
   }
 
   _clearRoundTargets() {
@@ -331,9 +460,12 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     }
     if (aliveCount === 0 && this._roundActive) {
       this._roundActive = false;
+      var capturedRoundId = this._roundId;
       var self = this;
-      setTimeout(function() {
+      this._scheduleTimeout(function() {
         if (self._stopped) return;
+        // Only proceed if this is still the same round
+        if (self._roundId !== capturedRoundId) return;
         self._startNextRound();
       }, 1200);
     }
@@ -361,7 +493,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
     this._applyShotSpread();
 
-    // Collect meshes from visible, alive targets
+    // Collect meshes from alive targets (revealed or not — they exist in the world)
+    // But only revealed targets should be hittable (player must peek to see them)
     var allMeshes = [];
     var meshToTarget = new Map();
 
@@ -392,14 +525,17 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
       // Check if we hit cover first
       if (coverMeshes.indexOf(hitObj) !== -1) {
-        // Hit cover — no damage to targets
+        // Hit cover — counts as a miss
+        this._missCount++;
         if (this._onMiss) this._onMiss();
         return;
       }
 
       var target = meshToTarget.get(hitObj);
 
-      if (target && target.alive) {
+      if (target && target.alive && !target.scored) {
+        // Mark as scored IMMEDIATELY to prevent double-awarding
+        target.scored = true;
         target.alive = false;
         target.hitAnim = 1.0;
         this._hitCount++;
@@ -411,15 +547,19 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           VantageEngine.Audio.playKillSound();
         }
 
-        var eliminationTime = now - (target.revealTime || target.spawnTime);
-        this._eliminationTimes.push(eliminationTime);
+        // Reaction time = ms from when enemy became visible until this hit
+        // Uses revealTime (when enemy first became visible to the player)
+        var reactionTimeMs = now - (target.revealTime || target.spawnTime);
+        this._eliminationTimes.push(reactionTimeMs);
 
-        if (this._onHit) this._onHit(eliminationTime);
+        if (this._onHit) this._onHit(reactionTimeMs);
         hit = true;
 
         var self = this;
-        setTimeout(function() {
+        var capturedRoundId = this._roundId;
+        this._scheduleTimeout(function() {
           if (self._stopped) return;
+          // Only remove if still in the same round context
           var idx = self._targets.indexOf(target);
           if (idx !== -1) self._targets.splice(idx, 1);
           var rIdx = self._roundTargets.indexOf(target);
@@ -435,10 +575,17 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
           self._checkRoundComplete();
         }, 200);
+      } else if (target && !target.alive) {
+        // Shot hit an already-eliminated target — count as miss, no points
+        this._missCount++;
+        if (this._onMiss) this._onMiss();
       }
     }
 
-    if (!hit && this._onMiss) this._onMiss();
+    if (!hit) {
+      this._missCount++;
+      if (this._onMiss) this._onMiss();
+    }
   }
 
   // ─── Update Loop ─────────────────────────────────────
@@ -496,8 +643,9 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           }
         }
 
+        // Track total exposure time (ms this frame the target was visible)
         if (t.revealed) {
-          this._exposureTimes.push(dt * 1000);
+          this._totalExposureMs += dt * 1000;
         }
       } else {
         // Hit animation
@@ -537,6 +685,9 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   }
 
   // ─── Humanoid Bot Builder ────────────────────────────
+  // Targets are scaled to be clearly visible at 14-16 unit distance.
+  // The scale ensures a minimum on-screen size suitable for FPS training.
+  // Hitboxes match the visible geometry exactly.
 
   _buildHumanoidBot(radius) {
     var group = new THREE.Group();
@@ -577,68 +728,85 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       opacity: 0,
     });
 
-    var scale = radius / 0.4;
+    // Use the larger of the radius-based scale or a minimum scale
+    // so targets are always visible at training distances.
+    var scale = Math.max(this.constructor.BOT_MIN_SCALE, radius / 0.2);
 
-    var headGeo = new THREE.SphereGeometry(0.18 * scale, 16, 16);
+    // ── Head (distinct sphere) ──
+    var headGeo = new THREE.SphereGeometry(0.22 * scale, 16, 16);
     var head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 0.85 * scale;
+    head.position.y = 1.0 * scale;
     head.userData.hitZone = 'head';
     group.add(head);
 
-    var visorGeo = new THREE.BoxGeometry(0.25 * scale, 0.06 * scale, 0.05 * scale);
+    // ── Visor (bright strip across the face) ──
+    var visorGeo = new THREE.BoxGeometry(0.30 * scale, 0.07 * scale, 0.06 * scale);
     var visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0, 0.85 * scale, -0.15 * scale);
+    visor.position.set(0, 1.0 * scale, -0.18 * scale);
     visor.userData.hitZone = 'head';
     group.add(visor);
 
-    var torsoGeo = new THREE.BoxGeometry(0.4 * scale, 0.5 * scale, 0.25 * scale);
+    // ── Neck ──
+    var neckGeo = new THREE.CylinderGeometry(0.08 * scale, 0.10 * scale, 0.12 * scale, 8);
+    var neck = new THREE.Mesh(neckGeo, bodyMat);
+    neck.position.y = 0.82 * scale;
+    neck.userData.hitZone = 'body';
+    group.add(neck);
+
+    // ── Torso (large box — primary aim area) ──
+    var torsoGeo = new THREE.BoxGeometry(0.50 * scale, 0.55 * scale, 0.30 * scale);
     var torso = new THREE.Mesh(torsoGeo, bodyMat);
-    torso.position.y = 0.45 * scale;
+    torso.position.y = 0.50 * scale;
     torso.userData.hitZone = 'body';
     group.add(torso);
 
-    var chestAccentGeo = new THREE.BoxGeometry(0.42 * scale, 0.08 * scale, 0.26 * scale);
+    // ── Chest accent plate ──
+    var chestAccentGeo = new THREE.BoxGeometry(0.52 * scale, 0.10 * scale, 0.32 * scale);
     var chestAccent = new THREE.Mesh(chestAccentGeo, accentMat);
-    chestAccent.position.y = 0.55 * scale;
+    chestAccent.position.y = 0.60 * scale;
     chestAccent.userData.hitZone = 'body';
     group.add(chestAccent);
 
-    var shoulderGeo = new THREE.SphereGeometry(0.1 * scale, 12, 12);
+    // ── Shoulders ──
+    var shoulderGeo = new THREE.SphereGeometry(0.12 * scale, 12, 12);
     var leftShoulder = new THREE.Mesh(shoulderGeo, accentMat);
-    leftShoulder.position.set(-0.25 * scale, 0.65 * scale, 0);
+    leftShoulder.position.set(-0.30 * scale, 0.72 * scale, 0);
     leftShoulder.userData.hitZone = 'body';
     group.add(leftShoulder);
 
     var rightShoulder = new THREE.Mesh(shoulderGeo, accentMat);
-    rightShoulder.position.set(0.25 * scale, 0.65 * scale, 0);
+    rightShoulder.position.set(0.30 * scale, 0.72 * scale, 0);
     rightShoulder.userData.hitZone = 'body';
     group.add(rightShoulder);
 
-    var armGeo = new THREE.CylinderGeometry(0.06 * scale, 0.06 * scale, 0.4 * scale, 8);
+    // ── Arms ──
+    var armGeo = new THREE.CylinderGeometry(0.07 * scale, 0.07 * scale, 0.45 * scale, 8);
     var leftArm = new THREE.Mesh(armGeo, bodyMat);
-    leftArm.position.set(-0.28 * scale, 0.4 * scale, 0);
+    leftArm.position.set(-0.34 * scale, 0.45 * scale, 0);
     leftArm.userData.hitZone = 'body';
     group.add(leftArm);
 
     var rightArm = new THREE.Mesh(armGeo, bodyMat);
-    rightArm.position.set(0.28 * scale, 0.4 * scale, 0);
+    rightArm.position.set(0.34 * scale, 0.45 * scale, 0);
     rightArm.userData.hitZone = 'body';
     group.add(rightArm);
 
-    var hipsGeo = new THREE.BoxGeometry(0.35 * scale, 0.15 * scale, 0.22 * scale);
+    // ── Hips ──
+    var hipsGeo = new THREE.BoxGeometry(0.40 * scale, 0.18 * scale, 0.26 * scale);
     var hips = new THREE.Mesh(hipsGeo, bodyMat);
-    hips.position.y = 0.15 * scale;
+    hips.position.y = 0.18 * scale;
     hips.userData.hitZone = 'body';
     group.add(hips);
 
-    var legGeo = new THREE.CylinderGeometry(0.08 * scale, 0.08 * scale, 0.5 * scale, 8);
+    // ── Legs ──
+    var legGeo = new THREE.CylinderGeometry(0.09 * scale, 0.09 * scale, 0.55 * scale, 8);
     var leftLeg = new THREE.Mesh(legGeo, bodyMat);
-    leftLeg.position.set(-0.12 * scale, -0.2 * scale, 0);
+    leftLeg.position.set(-0.14 * scale, -0.22 * scale, 0);
     leftLeg.userData.hitZone = 'body';
     group.add(leftLeg);
 
     var rightLeg = new THREE.Mesh(legGeo, bodyMat);
-    rightLeg.position.set(0.12 * scale, -0.2 * scale, 0);
+    rightLeg.position.set(0.14 * scale, -0.22 * scale, 0);
     rightLeg.userData.hitZone = 'body';
     group.add(rightLeg);
 
@@ -648,6 +816,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   }
 
   // ─── Stats and Progression ───────────────────────────
+  // Returns the authoritative stats object used by the scoring pipeline.
+  // All fields needed by calculatePeekEliminateScore are included here.
 
   getPeekEliminateStats() {
     var avgElimTime = 0;
@@ -657,24 +827,30 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       avgElimTime = Math.round(sum / this._eliminationTimes.length);
     }
 
-    var totalExposure = 0;
-    for (var j = 0; j < this._exposureTimes.length; j++) totalExposure += this._exposureTimes[j];
+    var hits = this._hitCount;
+    var misses = this._missCount;
+    var totalTargets = this._totalTargetsSpawned;
 
     return {
       peeksPerformed: this._peeksPerformed,
       targetsEliminated: this._targetsEliminated,
-      avgEliminationTime: avgElimTime,
+      avgTimeToEliminate: avgElimTime,
+      avgEliminationTime: avgElimTime,  // alias for backward compatibility
       damageTaken: this._damageTaken,
-      totalExposureTime: Math.round(totalExposure),
+      totalExposureTime: Math.round(this._totalExposureMs),
       roundsCompleted: Math.min(this._currentRound, this._totalRounds),
       totalRounds: this._totalRounds,
+      totalTargets: totalTargets,
+      hits: hits,
+      misses: misses,
+      avgReactionTime: avgElimTime,
     };
   }
 
   getProgression() {
     if (!this._sessionStartTime) return 0;
     var hits = this._hitCount;
-    var totalShots = hits + (this._missCount || 0);
+    var totalShots = hits + this._missCount;
     if (totalShots === 0) return 0;
     return hits / totalShots;
   }
