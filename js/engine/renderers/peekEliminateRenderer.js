@@ -1,14 +1,27 @@
 /* ============================================
    Peek Eliminate Renderer — 3D
-   Lane-based peek simulation. Player peeks around
-   cover walls using A/D or mouse. Targets hide behind
-   cover and must be eliminated before they "shoot back".
+   VALORANT-style angle-clearing exercise.
+   Player peeks around cover with A/D, identifies
+   enemies, and eliminates them before they shoot back.
    ============================================ */
 VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer extends VantageEngine.Renderers.ThreeArenaRenderer {
+
+  // ─── Peek Movement Constants ─────────────────────────
+  static PEEK_MAX_OFFSET   = 2.8;   // max lateral offset from center
+  static PEEK_SPEED        = 8.0;   // units/sec peek speed
+  static PEEK_RETURN_SPEED = 10.0;  // units/sec return to center
+  static PEEK_BOUNDARY_MIN = -3.5;  // min X offset (can't go through left cover)
+  static PEEK_BOUNDARY_MAX = 3.5;   // max X offset (can't go through right cover)
 
   constructor(canvas, scenario, config) {
     super(canvas, scenario, config);
 
+    // ─── Peek state ────────────────────────────────────
+    this._peekOffsetX = 0;        // current lateral offset
+    this._peekTargetX = 0;        // target offset (from input)
+    this._keysDown = {};
+
+    // ─── Round/lanes state ─────────────────────────────
     this._lanes = [];
     this._coverWalls = [];
     this._rounds = [];
@@ -26,26 +39,38 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._roundTargets = [];
     this._roundStartTime = 0;
 
+    // ─── Difficulty settings ───────────────────────────
     var S = VantageEngine.Settings;
     var diffSetting = S.getDifficulty(config.difficulty || 'medium');
     var diffId = diffSetting ? diffSetting.id : 'medium';
 
     if (diffId === 'easy') {
       this._totalRounds = 3;
-      this._reactionWindow = 2000;
+      this._reactionWindow = 2500;
     } else if (diffId === 'hard') {
       this._totalRounds = 7;
-      this._reactionWindow = 800;
+      this._reactionWindow = 1000;
     } else {
       this._totalRounds = 5;
-      this._reactionWindow = 1400;
+      this._reactionWindow = 1600;
     }
 
+    // ─── Lane configuration ────────────────────────────
+    // Three lanes: left, center, right
+    // Cover walls are narrow pillars that block the view until peeked around
+    // Player starts at z=0, can peek left/right
+    // Layout: cover at z=-8, targets at z=-14
+    // Covers are narrow so peeking reveals targets
     this._lanePositions = [
-      { x: -6, z: -12, yaw: 0.35 },
-      { x: 0, z: -14, yaw: 0 },
-      { x: 6, z: -12, yaw: -0.35 },
+      { x: -5, z: -14, coverX: -3, coverZ: -8, coverWidth: 1.2 },  // Left lane
+      { x: 0,  z: -16, coverX: 0,  coverZ: -8, coverWidth: 1.2 },  // Center lane
+      { x: 5,  z: -14, coverX: 3,  coverZ: -8, coverWidth: 1.2 },  // Right lane
     ];
+
+    // ─── Bound handlers ────────────────────────────────
+    this._onKeyDown = this._handleKeyDown.bind(this);
+    this._onKeyUp = this._handleKeyUp.bind(this);
+    this._onBlur = this._handleBlur.bind(this);
   }
 
   init() {
@@ -67,11 +92,21 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._currentRound = 0;
     this._roundTargets = [];
     this._roundActive = false;
+    this._peekOffsetX = 0;
+    this._peekTargetX = 0;
+    this._keysDown = {};
+
+    document.addEventListener('keydown', this._onKeyDown);
+    document.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('blur', this._onBlur);
+
     this._startNextRound();
     this._loop();
   }
 
   pause() {
+    this._keysDown = {};
+    this._peekTargetX = 0;
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.pause.call(this);
   }
 
@@ -80,37 +115,137 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
   }
 
   stop() {
+    document.removeEventListener('keydown', this._onKeyDown);
+    document.removeEventListener('keyup', this._onKeyUp);
+    window.removeEventListener('blur', this._onBlur);
     this._clearRoundTargets();
+    this._keysDown = {};
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
     this._coverWalls = [];
     this._roundTargets = [];
   }
 
+  // ─── Input Safety ────────────────────────────────────
+
+  _handleBlur() {
+    this._keysDown = {};
+    this._peekTargetX = 0;
+  }
+
+  // ─── Key Handlers ────────────────────────────────────
+
+  _handleKeyDown(ev) {
+    if (this._paused || this._stopped || !this.running) return;
+    var key = ev.key.toLowerCase();
+    if (key === 'a' || key === 'd') {
+      this._keysDown[key] = true;
+      this._updatePeekTarget();
+    }
+  }
+
+  _handleKeyUp(ev) {
+    if (this._paused || this._stopped || !this.running) return;
+    var key = ev.key.toLowerCase();
+    if (key === 'a' || key === 'd') {
+      this._keysDown[key] = false;
+      this._updatePeekTarget();
+    }
+  }
+
+  _updatePeekTarget() {
+    var left = !!this._keysDown['a'];
+    var right = !!this._keysDown['d'];
+
+    if (left && !right) {
+      this._peekTargetX = -this.constructor.PEEK_MAX_OFFSET;
+    } else if (right && !left) {
+      this._peekTargetX = this.constructor.PEEK_MAX_OFFSET;
+    } else {
+      this._peekTargetX = 0;
+    }
+  }
+
+  // ─── Peek Movement ───────────────────────────────────
+
+  _updatePeekMovement(dt) {
+    var C = this.constructor;
+    var diff = this._peekTargetX - this._peekOffsetX;
+
+    if (Math.abs(diff) > 0.01) {
+      var speed = (this._peekTargetX === 0) ? C.PEEK_RETURN_SPEED : C.PEEK_SPEED;
+      var step = speed * dt;
+      if (step > Math.abs(diff)) step = Math.abs(diff);
+      this._peekOffsetX += Math.sign(diff) * step;
+    } else {
+      this._peekOffsetX = this._peekTargetX;
+    }
+
+    // Clamp to boundaries
+    this._peekOffsetX = Math.max(C.PEEK_BOUNDARY_MIN, Math.min(C.PEEK_BOUNDARY_MAX, this._peekOffsetX));
+
+    // Update camera position
+    if (this._camera) {
+      this._camera.position.x = this._peekOffsetX;
+    }
+  }
+
+  // ─── Cover and Visibility ────────────────────────────
+
   _buildCoverWalls() {
     var wallMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2a2e,
+      color: 0x3a3a3e,
       roughness: 0.85,
       metalness: 0.1,
     });
 
     for (var i = 0; i < this._lanePositions.length; i++) {
       var lane = this._lanePositions[i];
-      var wallGeo = new THREE.BoxGeometry(3.5, 4, 0.4);
+      var wallGeo = new THREE.BoxGeometry(lane.coverWidth, 4, 0.5);
       var wall = new THREE.Mesh(wallGeo, wallMat);
-      wall.position.set(lane.x, 2, lane.z + 4);
+      wall.position.set(lane.coverX, 2, lane.coverZ);
+      wall.userData.isCover = true;
       this._scene.add(wall);
       this._coverWalls.push(wall);
 
-      var trimGeo = new THREE.BoxGeometry(3.6, 0.1, 0.45);
-      var trimMat = new THREE.MeshStandardMaterial({ color: 0x444448, roughness: 0.7, metalness: 0.2 });
+      // Trim for visual clarity
+      var trimGeo = new THREE.BoxGeometry(lane.coverWidth + 0.1, 0.1, 0.55);
+      var trimMat = new THREE.MeshStandardMaterial({ color: 0x555558, roughness: 0.7, metalness: 0.2 });
       var topTrim = new THREE.Mesh(trimGeo, trimMat);
-      topTrim.position.set(lane.x, 4.05, lane.z + 4);
+      topTrim.position.set(lane.coverX, 4.05, lane.coverZ);
       this._scene.add(topTrim);
       var botTrim = new THREE.Mesh(trimGeo, trimMat);
-      botTrim.position.set(lane.x, 0.05, lane.z + 4);
+      botTrim.position.set(lane.coverX, 0.05, lane.coverZ);
       this._scene.add(botTrim);
     }
   }
+
+  _isTargetVisible(target) {
+    if (!this._camera) return false;
+
+    var lane = this._lanePositions[target.laneIdx];
+    var camPos = this._camera.position.clone();
+    var targetPos = new THREE.Vector3(lane.x, 1.7, lane.z);
+
+    // Direction from camera to target
+    var direction = new THREE.Vector3().subVectors(targetPos, camPos).normalize();
+    var distance = camPos.distanceTo(targetPos);
+
+    // Raycast from camera toward target
+    this._raycaster.set(camPos, direction);
+    this._raycaster.far = distance;
+
+    // Check if ray hits any cover wall before reaching target
+    var coverIntersects = this._raycaster.intersectObjects(this._coverWalls, false);
+
+    // If ray hits cover before reaching target, target is not visible
+    if (coverIntersects.length > 0 && coverIntersects[0].distance < distance - 0.1) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ─── Round Management ────────────────────────────────
 
   _startNextRound() {
     if (!this.running) return;
@@ -131,11 +266,11 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       var laneIdx;
       do {
         laneIdx = Math.floor(Math.random() * this._lanePositions.length);
-      } while (usedLanes.indexOf(laneIdx) !== -1);
+      } while (usedLanes.indexOf(laneIdx) !== -1 && usedLanes.length < this._lanePositions.length);
       usedLanes.push(laneIdx);
 
       var lane = this._lanePositions[laneIdx];
-      var delay = i === 0 ? 0 : 300 + Math.random() * 700;
+      var delay = i === 0 ? 0 : 400 + Math.random() * 600;
 
       var self = this;
       (function(li, ln, d) {
@@ -152,7 +287,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
     var radius = this.targetBaseRadius;
     var botGroup = this._buildHumanoidBot(radius);
-    botGroup.position.set(lane.x, 1.7, lane.z);
+    botGroup.position.set(lane.x, 0, lane.z);
     this._scene.add(botGroup);
 
     var target = {
@@ -189,19 +324,22 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._roundTargets = [];
   }
 
-  _isTargetVisible(target) {
-    var camYaw = this._yaw;
-    var lane = this._lanePositions[target.laneIdx];
-    var toTargetAngle = Math.atan2(lane.x, -(lane.z));
-    var angleDiff = Math.abs(camYaw - toTargetAngle);
-    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
-
-    var coverHalfWidth = 1.75;
-    var coverDist = Math.abs(lane.z + 4);
-    var coverAngularWidth = Math.atan2(coverHalfWidth, coverDist);
-
-    return angleDiff > coverAngularWidth * 0.8;
+  _checkRoundComplete() {
+    var aliveCount = 0;
+    for (var i = 0; i < this._roundTargets.length; i++) {
+      if (this._roundTargets[i].alive) aliveCount++;
+    }
+    if (aliveCount === 0 && this._roundActive) {
+      this._roundActive = false;
+      var self = this;
+      setTimeout(function() {
+        if (self._stopped) return;
+        self._startNextRound();
+      }, 1200);
+    }
   }
+
+  // ─── Shooting ────────────────────────────────────────
 
   _tryFire() {
     if (!this.running || this._paused || this._stopped) return;
@@ -223,6 +361,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     this._raycaster.setFromCamera(new THREE.Vector2(0, 0), this._camera);
     this._applyShotSpread();
 
+    // Collect meshes from visible, alive targets
     var allMeshes = [];
     var meshToTarget = new Map();
 
@@ -238,7 +377,11 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       });
     }
 
-    var intersects = this._raycaster.intersectObjects(allMeshes, false);
+    // Also check cover walls to prevent shooting through them
+    var coverMeshes = this._coverWalls.slice();
+    var allShootable = allMeshes.concat(coverMeshes);
+
+    var intersects = this._raycaster.intersectObjects(allShootable, false);
 
     this._spawnTracer(intersects.length > 0 ? intersects[0].point : null);
     this._applyRecoilKick();
@@ -246,6 +389,14 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     var hit = false;
     if (intersects.length > 0) {
       var hitObj = intersects[0].object;
+
+      // Check if we hit cover first
+      if (coverMeshes.indexOf(hitObj) !== -1) {
+        // Hit cover — no damage to targets
+        if (this._onMiss) this._onMiss();
+        return;
+      }
+
       var target = meshToTarget.get(hitObj);
 
       if (target && target.alive) {
@@ -260,7 +411,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           VantageEngine.Audio.playKillSound();
         }
 
-        var eliminationTime = now - target.revealTime;
+        var eliminationTime = now - (target.revealTime || target.spawnTime);
         this._eliminationTimes.push(eliminationTime);
 
         if (this._onHit) this._onHit(eliminationTime);
@@ -290,33 +441,25 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     if (!hit && this._onMiss) this._onMiss();
   }
 
-  _checkRoundComplete() {
-    var aliveCount = 0;
-    for (var i = 0; i < this._roundTargets.length; i++) {
-      if (this._roundTargets[i].alive) aliveCount++;
-    }
-    if (aliveCount === 0 && this._roundActive) {
-      this._roundActive = false;
-      var self = this;
-      setTimeout(function() {
-        if (self._stopped) return;
-        self._startNextRound();
-      }, 1000);
-    }
-  }
+  // ─── Update Loop ─────────────────────────────────────
 
   _update() {
     if (!this._clock) return;
     var dt = Math.min(this._clock.getDelta(), 0.1);
     var now = Date.now();
 
+    // Update peek movement
+    this._updatePeekMovement(dt);
+
     this._updateParticles(dt);
     this._updateWeapon(dt);
 
+    // Update targets
     for (var i = 0; i < this._roundTargets.length; i++) {
       var t = this._roundTargets[i];
 
       if (t.alive) {
+        // Check visibility based on peek position
         var visible = this._isTargetVisible(t);
         if (visible && !t.revealed) {
           t.revealed = true;
@@ -324,6 +467,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           this._peeksPerformed++;
         }
 
+        // Fade in
         t.opacity = Math.min(1, t.opacity + dt * 8);
         var easedOpacity = t.opacity < 1 ? 1 - Math.pow(1 - t.opacity, 3) : 1;
 
@@ -333,6 +477,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           }
         }
 
+        // Face the player
         if (this._camera) {
           var camPos = this._camera.position.clone();
           var botPos = t.mesh.position.clone();
@@ -342,6 +487,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           t.mesh.rotation.y = angle;
         }
 
+        // Check reaction window penalty
         if (t.revealed && !t.penaltyApplied) {
           var elapsed = now - t.revealTime;
           if (elapsed > this._reactionWindow) {
@@ -354,6 +500,7 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
           this._exposureTimes.push(dt * 1000);
         }
       } else {
+        // Hit animation
         t.hitAnim -= dt * 6;
         if (t.hitAnim > 0) {
           if (t.hitAnim > 0.8) {
@@ -388,6 +535,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
       }
     }
   }
+
+  // ─── Humanoid Bot Builder ────────────────────────────
 
   _buildHumanoidBot(radius) {
     var group = new THREE.Group();
@@ -497,6 +646,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
 
     return group;
   }
+
+  // ─── Stats and Progression ───────────────────────────
 
   getPeekEliminateStats() {
     var avgElimTime = 0;
