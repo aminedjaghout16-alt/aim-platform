@@ -194,7 +194,7 @@ VantageEngine.Scenarios = {
       defaults: {
         targetSize: 'medium',
         targetSpeed: 'normal',
-        duration: 'standard',
+        duration: 'endless',
         difficulty: 'medium',
         maxTargets: 1,
       },
@@ -219,7 +219,7 @@ VantageEngine.Scenarios = {
       defaults: {
         targetSize: 'medium',
         targetSpeed: 'normal',
-        duration: 'standard',
+        duration: 'endless',
         difficulty: 'medium',
         maxTargets: 1,
       },
@@ -244,7 +244,7 @@ VantageEngine.Scenarios = {
       defaults: {
         targetSize: 'small',
         targetSpeed: 'normal',
-        duration: 'standard',
+        duration: 'endless',
         difficulty: 'medium',
         maxTargets: 1,
       },
@@ -269,7 +269,7 @@ VantageEngine.Scenarios = {
       defaults: {
         targetSize: 'medium',
         targetSpeed: 'normal',
-        duration: 'standard',
+        duration: 'endless',
         difficulty: 'medium',
         maxTargets: 1,
       },
@@ -294,7 +294,7 @@ VantageEngine.Scenarios = {
       defaults: {
         targetSize: 'medium',
         targetSpeed: 'normal',
-        duration: 'standard',
+        duration: 'endless',
         difficulty: 'medium',
         maxTargets: 1,
       },

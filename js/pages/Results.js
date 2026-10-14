@@ -3,8 +3,8 @@
    ============================================ */
 window.VantagePages = window.VantagePages || {};
 
-VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQuickStart }) {
-  const [results, setResults] = useState(null); // null = loading
+VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQuickStart, selectedResultId }) {
+  const [results, setResults] = useState(null);
 
   var uid = user ? user.uid : null;
 
@@ -49,6 +49,74 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
     );
   }
 
+  if (selectedResultId) {
+    var selectedResult = null;
+    for (var si = 0; si < results.length; si++) {
+      if (results[si].id === selectedResultId) { selectedResult = results[si]; break; }
+    }
+
+    if (selectedResult) {
+      var sc = VantageEngine.Scenarios.getById(selectedResult.scenarioId);
+      var st = selectedResult.stats || {};
+      var cfg = selectedResult.config || {};
+      var statKeys = Object.keys(st);
+
+      return e('div', { className: 'vpage-results' },
+        e(VantageUI.PageHeader, {
+          title: 'Session Details',
+          subtitle: sc ? sc.name : selectedResult.scenarioId,
+          action: e(VantageUI.Button, { variant: 'ghost', onClick: function () { onNavigate('results'); } }, '← BACK TO HISTORY'),
+        }),
+
+        e('div', { className: 'vstats-grid', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' } },
+          [
+            { label: 'Score', value: selectedResult.score, icon: '◈', color: 'var(--accent-primary)' },
+            { label: 'Grade', value: selectedResult.grade, icon: '△', color: gradeColor(selectedResult.grade) },
+            { label: 'Accuracy', value: (st.accuracy || 0) + '%', icon: '⟶', color: 'var(--info)' },
+            { label: 'Hits', value: st.hits || 0, icon: '◎', color: 'var(--success)' },
+            { label: 'Misses', value: st.misses || 0, icon: '⊗', color: 'var(--danger, #ff3d5a)' },
+            { label: 'Best Streak', value: st.bestStreak || 0, icon: '◇', color: 'var(--accent-secondary)' },
+          ].map(function (s, i) {
+            return e('div', { key: i, className: 'animate-in stagger-' + (i + 1) },
+              e(VantageUI.StatCard, s),
+            );
+          })
+        ),
+
+        st.avgReactionTime ? e(VantageUI.Card, { className: 'animate-in stagger-3', style: { padding: '16px', marginTop: '16px' } },
+          e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' } },
+            [
+              { label: 'Avg Reaction Time', value: st.avgReactionTime + 'ms' },
+              { label: 'Duration', value: st.duration ? Math.round(st.duration) + 's' : '—' },
+              { label: 'Difficulty', value: cfg.difficulty || '—' },
+            ].map(function (item, i) {
+              return e('div', { key: i },
+                e('div', { style: { fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' } }, item.label),
+                e('div', { style: { fontSize: '18px', fontWeight: 600 } }, item.value),
+              );
+            })
+          ),
+        ) : null,
+
+        statKeys.length > 0 ? e(VantageUI.Card, { className: 'animate-in stagger-4', style: { padding: '16px', marginTop: '16px' } },
+          e('h3', { style: { margin: '0 0 12px 0', fontSize: '14px' } }, 'All Stats'),
+          e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '8px' } },
+            statKeys.map(function (key) {
+              return e('div', { key: key, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-primary, rgba(255,255,255,0.06))' } },
+                e('span', { style: { fontSize: '12px', color: 'var(--text-secondary)' } }, key),
+                e('span', { style: { fontSize: '12px', fontWeight: 600 } }, st[key]),
+              );
+            })
+          ),
+        ) : null,
+
+        e('div', { style: { marginTop: '16px', fontSize: '12px', color: 'var(--text-secondary)' } },
+          'Session ID: ' + selectedResult.id + ' · ' + formatDate(selectedResult.timestamp || selectedResult.createdAt)
+        ),
+      );
+    }
+  }
+
   var agg = VantageEngine.Scoring.aggregateStats(results);
 
   return e('div', { className: 'vpage-results' },
@@ -58,7 +126,6 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
       action: e(VantageUI.Button, { variant: 'primary', onClick: function () { onNavigate('training'); } }, 'TRAIN AGAIN'),
     }),
 
-    // Summary stats (computed from saved sessions)
     e('div', { className: 'vstats-grid' },
       [
         { label: 'Total Sessions', value: agg.totalSessions, icon: '◎', color: 'var(--accent-primary)' },
@@ -72,7 +139,6 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
       })
     ),
 
-    // Results table
     e(VantageUI.Card, { className: 'vresults-table-card animate-in stagger-5' },
       e('div', { className: 'vresults-table' },
         e('div', { className: 'vresults-table-header' },
@@ -88,7 +154,12 @@ VantagePages.Results = function Results({ onNavigate, user, latestResultId, onQu
           var sc = VantageEngine.Scenarios.getById(r.scenarioId);
           var st = r.stats || {};
           var isLatest = r.id === latestResultId;
-          return e('div', { key: r.id, className: 'vresults-table-row ' + (isLatest ? 'vresults-table-row-latest' : '') },
+          return e('div', {
+            key: r.id,
+            className: 'vresults-table-row ' + (isLatest ? 'vresults-table-row-latest' : ''),
+            style: { cursor: 'pointer' },
+            onClick: function () { onNavigate('results', r.id); },
+          },
             e('span', { className: 'vresults-table-scenario' },
               e('span', { className: 'vresult-icon' }, '◎'),
               sc ? sc.name : r.scenarioId,

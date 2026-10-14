@@ -397,4 +397,9 @@ VantageEngine.Renderers.MicroAdjustRenderer = class MicroAdjustRenderer extends 
     if (totalShots === 0) return 0;
     return hits / totalShots;
   }
+
+  isScenarioComplete() {
+    if (!this._sessionStartTime || !this.running) return false;
+    return (Date.now() - this._sessionStartTime) >= this._timeLimit;
+  }
 };

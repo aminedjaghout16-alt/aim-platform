@@ -49,6 +49,41 @@ VantageEngine.AimAnalysis = (function () {
       speedLowerBetter: true,
       skillCategory: 'flicking',
     },
+    'tac-counter-strafe': {
+      primary: ['score', 'accuracy', 'avgReactionTime'],
+      secondary: ['hits', 'misses', 'shotsFired', 'shotsWhileMoving', 'shotsWhileStopped', 'hitsWhileMoving', 'hitsWhileStopped', 'counterStrafeHits', 'bestStreak', 'duration'],
+      speedMetric: 'avgReactionTime',
+      speedLowerBetter: true,
+      skillCategory: 'precision',
+    },
+    'tac-peek-eliminate': {
+      primary: ['score', 'accuracy'],
+      secondary: ['hits', 'misses', 'targetsEliminated', 'peeksPerformed', 'damageTaken', 'avgEliminationTime', 'bestStreak', 'duration'],
+      speedMetric: 'avgEliminationTime',
+      speedLowerBetter: true,
+      skillCategory: 'reaction',
+    },
+    'tac-micro-adjust': {
+      primary: ['score', 'accuracy', 'firstShotAccuracy'],
+      secondary: ['hits', 'misses', 'shotsFired', 'firstShotHits', 'firstShotMisses', 'overcorrections', 'bestStreak', 'duration'],
+      speedMetric: 'avgReactionTime',
+      speedLowerBetter: true,
+      skillCategory: 'precision',
+    },
+    'tac-moving-enemy': {
+      primary: ['score', 'accuracy', 'avgHitTime'],
+      secondary: ['hits', 'misses', 'shotsFired', 'targetsKilled', 'bestStreak', 'duration'],
+      speedMetric: 'avgHitTime',
+      speedLowerBetter: true,
+      skillCategory: 'tracking',
+    },
+    'tac-duel-practice': {
+      primary: ['score', 'accuracy'],
+      secondary: ['hits', 'misses', 'shotsFired', 'eliminations', 'headshots', 'ammoUsed', 'bestStreak', 'duration'],
+      speedMetric: 'avgHitTime',
+      speedLowerBetter: true,
+      skillCategory: 'precision',
+    },
   };
 
   var SKILL_CATEGORIES = {
@@ -58,15 +93,19 @@ VantageEngine.AimAnalysis = (function () {
     },
     tracking: {
       label: 'Tracking',
-      exercises: ['strafe-tracking-3d', 'bot-strafe-3d'],
+      exercises: ['strafe-tracking-3d', 'bot-strafe-3d', 'tac-moving-enemy'],
     },
     reactive: {
       label: 'Reactive Aim',
-      exercises: ['reactive-tracking-3d'],
+      exercises: ['reactive-tracking-3d', 'tac-peek-eliminate'],
     },
     switching: {
       label: 'Target Switching',
       exercises: ['target-switching-3d'],
+    },
+    tactical_precision: {
+      label: 'Tactical Precision',
+      exercises: ['tac-counter-strafe', 'tac-micro-adjust', 'tac-duel-practice'],
     },
   };
 
@@ -529,13 +568,16 @@ VantageEngine.AimAnalysis = (function () {
       });
     }
 
-    var reactionExercises = ['static-flicking', 'adjustshot-3d', 'reactive-tracking-3d', 'bot-strafe-3d', 'target-switching-3d'];
+    var reactionExercises = ['static-flicking', 'adjustshot-3d', 'reactive-tracking-3d', 'bot-strafe-3d', 'target-switching-3d', 'tac-counter-strafe', 'tac-peek-eliminate', 'tac-moving-enemy'];
     var reactionMetrics = {
       'static-flicking': 'avgReactionTime',
       'adjustshot-3d': 'avgReactionTime',
       'reactive-tracking-3d': 'avgTrackingTime',
       'bot-strafe-3d': 'avgHitTime',
       'target-switching-3d': 'avgSwitchTime',
+      'tac-counter-strafe': 'avgReactionTime',
+      'tac-peek-eliminate': 'avgEliminationTime',
+      'tac-moving-enemy': 'avgHitTime',
     };
     var reactionValues = [];
     var reactionDetails = {};

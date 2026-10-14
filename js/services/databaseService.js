@@ -28,6 +28,19 @@ VantageServices.DatabaseService = {
 
   async saveTrainingResult(userId, result) {
     var db = this._db();
+    var timestamp = result.timestamp || new Date().toISOString();
+
+    var fingerprint = [
+      userId,
+      result.scenarioId || '',
+      timestamp,
+      result.score || 0,
+      (result.stats && result.stats.hits) || 0,
+      (result.stats && result.stats.misses) || 0,
+    ].join('|');
+
+    var sessionId = result._sessionId || this._generateSessionId(fingerprint);
+
     var docData = {
       userId: userId,
       scenarioId: result.scenarioId || '',
@@ -36,11 +49,61 @@ VantageServices.DatabaseService = {
       stats: result.stats || {},
       config: result.config || {},
       breakdown: result.breakdown || {},
-      timestamp: result.timestamp || new Date().toISOString(),
+      timestamp: timestamp,
+      sessionId: sessionId,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
-    var ref = await db.collection('results').add(docData);
-    return { id: ref.id, ...docData };
+
+    var docRef = db.collection('results').doc(sessionId);
+
+    try {
+      await db.runTransaction(async function (transaction) {
+        var existingDoc = await transaction.get(docRef);
+        if (existingDoc.exists) {
+          // Duplicate — transaction completes without writing
+          return;
+        }
+        transaction.set(docRef, docData);
+      });
+    } catch (txErr) {
+      // Transaction failed (network error, contention, permission denied, etc.).
+      // Check whether a concurrent attempt already saved the document.
+      try {
+        var existing = await docRef.get();
+        if (existing.exists) {
+          // Another attempt saved it — treat as success (duplicate already stored)
+          return { id: sessionId, ...existing.data() };
+        }
+      } catch (readErr) {
+        // Could not even verify existence — propagate the original error
+        console.error('[DatabaseService] saveTrainingResult: post-tx read failed:', readErr);
+      }
+      // Document does not exist and transaction failed — genuine failure
+      throw new Error('Failed to save training result: ' + (txErr.message || txErr));
+    }
+
+    // Transaction succeeded — read back the confirmed document
+    var savedDoc = await docRef.get();
+    if (!savedDoc.exists) {
+      // Should not happen after a successful transaction set, but guard anyway
+      throw new Error('Training result was not persisted. Please try again.');
+    }
+
+    return { id: sessionId, ...savedDoc.data() };
+  },
+
+  _generateSessionId(fingerprint) {
+    var h1 = 0x811c9dc5;
+    for (var i = 0; i < fingerprint.length; i++) {
+      h1 ^= fingerprint.charCodeAt(i);
+      h1 = Math.imul(h1, 0x01000193);
+    }
+    var h2 = 0;
+    for (var j = 0; j < fingerprint.length; j++) {
+      h2 = ((h2 << 5) - h2) + fingerprint.charCodeAt(j);
+      h2 |= 0;
+    }
+    return 'sess_' + Math.abs(h1).toString(36) + Math.abs(h2).toString(36);
   },
 
   async getUserResults(userId) {

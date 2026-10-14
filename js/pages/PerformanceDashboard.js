@@ -18,7 +18,7 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
   var timeRange = _s3[0];
   var setTimeRange = _s3[1];
 
-  var _s4 = useState('all');
+  var _s4 = useState(null);
   var selectedExercise = _s4[0];
   var setSelectedExercise = _s4[1];
 
@@ -50,6 +50,9 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
     DB.getUserResults(uid).then(function (results) {
       if (cancelled) return;
       setAllResults(results || []);
+      if (results && results.length > 0) {
+        setSelectedExercise(results[0].scenarioId);
+      }
       setLoading(false);
     }).catch(function (err) {
       if (!cancelled) {
@@ -84,7 +87,7 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
     exercises.map(function (s) { return { value: s.id, label: s.name }; })
   );
 
-  var exerciseResults = selectedExercise === 'all'
+  var exerciseResults = (!selectedExercise || selectedExercise === 'all')
     ? filteredResults
     : filteredResults.filter(function (r) { return r.scenarioId === selectedExercise; });
 
@@ -105,9 +108,15 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
     : 0;
 
   var personalBests = {};
+  var personalBestsAllTime = {};
   filteredResults.forEach(function (r) {
-    if (!personalBests[r.scenarioId] || r.score > personalBests[r.scenarioId].score) {
-      personalBests[r.scenarioId] = r;
+    var diff = (r.config && r.config.difficulty) || 'medium';
+    var pbKey = r.scenarioId + ':' + diff;
+    if (!personalBests[pbKey] || r.score > personalBests[pbKey].score) {
+      personalBests[pbKey] = r;
+    }
+    if (!personalBestsAllTime[r.scenarioId] || r.score > personalBestsAllTime[r.scenarioId].score) {
+      personalBestsAllTime[r.scenarioId] = r;
     }
   });
   var pbList = Object.keys(personalBests).map(function (k) { return personalBests[k]; });
@@ -191,12 +200,18 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
   });
 
   var activityMap = {};
+  var activityKeys = [];
   filteredResults.forEach(function (r) {
-    var dk = formatShortDate(r.timestamp);
-    if (!activityMap[dk]) activityMap[dk] = { label: dk, value: 0 };
+    var d = new Date(r.timestamp);
+    var dk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    if (!activityMap[dk]) {
+      activityMap[dk] = { key: dk, label: formatShortDate(r.timestamp), value: 0 };
+      activityKeys.push(dk);
+    }
     activityMap[dk].value++;
   });
-  var activityData = Object.keys(activityMap).map(function (k) { return activityMap[k]; }).slice(-14);
+  activityKeys.sort();
+  var activityData = activityKeys.slice(-30).map(function (k) { return activityMap[k]; });
 
   var skillCategories = VantageEngine.AimAnalysis ? VantageEngine.AimAnalysis.getSkillCategories() : {};
   var radarData = [];
@@ -217,7 +232,7 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
 
   var pbProgression = [];
   var runningPB = 0;
-  var sortedAsc = filteredResults.slice().reverse();
+  var sortedAsc = exerciseResults.slice().reverse();
   for (var pbi = 0; pbi < sortedAsc.length; pbi++) {
     if (sortedAsc[pbi].score > runningPB) {
       runningPB = sortedAsc[pbi].score;
@@ -294,7 +309,7 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
       }),
       e('div', { style: { flex: 1 } }),
       e(VantageUI.Select, {
-        value: selectedExercise,
+        value: selectedExercise || 'all',
         onChange: function (v) { setSelectedExercise(v); setCurrentPage(1); },
         options: exerciseOptions,
         className: 'vperf-exercise-select',
@@ -418,13 +433,14 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
                 ),
                 tableSlice.map(function (r) {
                   var sc = VantageEngine.Scenarios.getById(r.scenarioId);
-                  var isPB = personalBests[r.scenarioId] && personalBests[r.scenarioId].id === r.id;
-                  var diff = (r.config && r.config.difficulty) || '—';
+                  var diff = (r.config && r.config.difficulty) || 'medium';
+                  var pbKey = r.scenarioId + ':' + diff;
+                  var isPB = personalBests[pbKey] && personalBests[pbKey].id === r.id;
                   return e('div', {
                     key: r.id,
                     className: 'vresults-table-row',
                     style: { cursor: 'pointer' },
-                    onClick: function () { onNavigate('results'); },
+                    onClick: function () { onNavigate('results', r.id); },
                   },
                     e('span', { style: { flex: 2, display: 'flex', alignItems: 'center', gap: '6px' } },
                       e('span', { className: 'vresult-icon' }, '◎'),
@@ -495,7 +511,8 @@ VantagePages.PerformanceDashboard = function PerformanceDashboard({ onNavigate, 
             w.categoryId === 'flicking' ? 'flicking' :
             w.categoryId === 'tracking' ? 'tracking' :
             w.categoryId === 'reactive' ? 'tracking' :
-            w.categoryId === 'switching' ? 'target_switching' : w.categoryId
+            w.categoryId === 'switching' ? 'target_switching' :
+            w.categoryId === 'tactical_precision' ? 'tactical' : w.categoryId
           ) || {};
           var suggestedScenario = w.suggestedExercise ? VantageEngine.Scenarios.getById(w.suggestedExercise) : null;
           return e(VantageUI.Card, { key: w.categoryId || i, className: 'animate-in stagger-' + Math.min(i + 1, 6), style: { padding: '16px' } },

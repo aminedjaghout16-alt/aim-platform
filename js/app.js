@@ -398,7 +398,7 @@
             uid: user ? user.uid : null,
           });
         case 'results':
-          return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, onQuickStart: handleQuickStart });
+          return e(VantagePages.Results, { onNavigate: navigate, user: user, latestResultId: latestResultId, selectedResultId: pageParam, onQuickStart: handleQuickStart });
         case 'playlist':
           return e(VantagePages.PlaylistPage, { 
             activePlaylist: activePlaylist,

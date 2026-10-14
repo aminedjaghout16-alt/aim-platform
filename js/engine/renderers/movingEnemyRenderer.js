@@ -67,6 +67,15 @@ VantageEngine.Renderers.MovingEnemyRenderer = class MovingEnemyRenderer extends 
     var sizeSetting = S.getTargetSize(config.targetSize || 'medium');
     var baseRadius = sizeSetting ? sizeSetting.px / 100 : 0.36;
     this.targetBaseRadius = baseRadius * 1.1;
+
+    // Time limit by difficulty
+    if (diffId === 'easy') {
+      this._timeLimit = 90000;
+    } else if (diffId === 'hard') {
+      this._timeLimit = 45000;
+    } else {
+      this._timeLimit = 60000;
+    }
   }
 
   start(sessionData) {
@@ -643,5 +652,10 @@ VantageEngine.Renderers.MovingEnemyRenderer = class MovingEnemyRenderer extends 
     var totalShots = hits + (this._missCount || 0);
     if (totalShots === 0) return 0;
     return hits / totalShots;
+  }
+
+  isScenarioComplete() {
+    if (!this._sessionStartTime || !this.running) return false;
+    return (Date.now() - this._sessionStartTime) >= this._timeLimit;
   }
 };

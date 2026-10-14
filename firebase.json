@@ -14,7 +14,20 @@
       "DAILY_PLAN_IMPLEMENTATION.md",
       "SETUP.md",
       "WEAPON_SYSTEM_CHANGES.md",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "src/**",
+      "aminedjaghout16-alt-aim-platform-8cbea27/**",
+      "n",
+      ".git/**",
+      ".gitignore",
+      ".env",
+      ".env.*",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "*.local",
+      ".firebaserc",
+      "package.json",
+      "package-lock.json"
     ],
     "rewrites": [
       {

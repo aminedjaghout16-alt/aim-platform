@@ -527,4 +527,8 @@ VantageEngine.Renderers.PeekEliminateRenderer = class PeekEliminateRenderer exte
     if (totalShots === 0) return 0;
     return hits / totalShots;
   }
+
+  isScenarioComplete() {
+    return !this.running && this._currentRound > this._totalRounds;
+  }
 };

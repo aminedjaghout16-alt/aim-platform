@@ -137,6 +137,11 @@ VantageEngine.TrainingEngine = class {
       if (totalMs > 0 && this._elapsed >= totalMs) {
         this.finish();
       }
+
+      // Check if the renderer signals scenario completion (tactical modes)
+      if (this.renderer && this.renderer.isScenarioComplete && this.renderer.isScenarioComplete()) {
+        this.finish();
+      }
     }, 50);
   }
 
@@ -191,6 +196,11 @@ VantageEngine.TrainingEngine = class {
       const durationSetting = VantageEngine.Settings.getDuration(this.config.duration);
       const totalMs = durationSetting ? durationSetting.seconds * 1000 : 0;
       if (totalMs > 0 && this._elapsed >= totalMs) this.finish();
+
+      // Check if the renderer signals scenario completion (tactical modes)
+      if (this.renderer && this.renderer.isScenarioComplete && this.renderer.isScenarioComplete()) {
+        this.finish();
+      }
     }, 50);
     if (this.renderer && this.renderer.resume) this.renderer.resume();
   }

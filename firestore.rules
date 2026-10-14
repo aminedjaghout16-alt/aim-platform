@@ -2,6 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ─── Helper Functions ──────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -15,35 +17,48 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Validate that displayName matches the user's profile
+    // Validate that displayName matches the user's profile (server-side read)
     function displayNameMatches(userId) {
-      return request.resource.data.displayName == 
+      return request.resource.data.displayName ==
         get(/databases/$(database)/documents/users/$(userId)).data.displayName;
     }
 
     // Validate leaderboard entry fields (exact set allowed)
     function validLeaderboardEntryFields() {
       return request.resource.data.keys().hasOnly([
-        'userId', 'displayName', 'score', 'accuracy', 'scenarioId', 
+        'userId', 'displayName', 'score', 'accuracy', 'scenarioId',
         'weaponId', 'grade', 'createdAt'
       ]);
     }
 
+    // Fields that clients must never modify via update
+    function protectedFieldsUnchanged() {
+      return request.resource.data.role == resource.data.role
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email;
+    }
+
+    // ─── User Profiles ─────────────────────────────────────
+    // Each user can only read and write their own document.
+    // Protected fields (role, uid, email) cannot be changed client-side.
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      
-      // Create: owner only, role must be absent or 'user'
+      // Read: owner only — no cross-user reads allowed
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Create: owner only; role must be absent or 'user'; uid must match
       allow create: if isOwner(userId) &&
-        (!('role' in request.resource.data) || request.resource.data.role == 'user');
-      
-      // Update: owner only, role cannot be changed (must remain the same or be absent in both)
-      allow update: if isOwner(userId) &&
-        (resource.data.role == request.resource.data.role ||
-         (!('role' in resource.data) && !('role' in request.resource.data)));
-      
+        (!('role' in request.resource.data) || request.resource.data.role == 'user') &&
+        (!('uid' in request.resource.data) || request.resource.data.uid == userId);
+
+      // Update: owner only; protected fields (role, uid, email) cannot change
+      allow update: if isOwner(userId) && protectedFieldsUnchanged();
+
+      // Delete: owner or admin
       allow delete: if isOwner(userId) || isAdmin();
     }
 
+    // ─── Training Results ──────────────────────────────────
+    // Users can only access their own results.
     match /results/{resultId} {
       allow read: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
@@ -53,8 +68,10 @@ service cloud.firestore {
         request.resource.data.score is number &&
         request.resource.data.scenarioId is string;
 
+      // Prevent changing the userId on an existing result
       allow update: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
 
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
@@ -64,6 +81,7 @@ service cloud.firestore {
     // Structure: leaderboards/{scenarioId}/entries/{userId} (all-time)
     //            leaderboards/{scenarioId}/weeks/{weekId}/entries/{userId} (weekly)
     match /leaderboards/{scenarioId} {
+      // Allow reading the scenario document itself (needed for sub-collection queries)
       allow read: if isAuthenticated();
 
       // All-time leaderboard
@@ -153,6 +171,7 @@ service cloud.firestore {
       }
     }
 
+    // ─── Playlists ─────────────────────────────────────────
     match /playlists/{playlistId} {
       allow read: if isAuthenticated() &&
         (resource.data.userId == request.auth.uid || isAdmin());
@@ -160,8 +179,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
 
+      // Prevent changing the ownerId on an existing playlist
       allow update: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
 
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
@@ -177,8 +198,10 @@ service cloud.firestore {
         request.resource.data.date is string &&
         request.resource.data.exercises is list;
 
+      // Prevent changing the ownerId on an existing plan
       allow update: if isAuthenticated() &&
-        resource.data.userId == request.auth.uid;
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
 
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
@@ -213,12 +236,14 @@ service cloud.firestore {
 
       allow update: if isAuthenticated() &&
         resource.data.userId == request.auth.uid &&
-        resource.data.status == 'incomplete';
+        resource.data.status == 'incomplete' &&
+        request.resource.data.userId == resource.data.userId;
 
       allow delete: if isAuthenticated() &&
         resource.data.userId == request.auth.uid;
     }
 
+    // ─── Catch-all: deny everything else ─────────────────
     match /{document=**} {
       allow read, write: if false;
     }

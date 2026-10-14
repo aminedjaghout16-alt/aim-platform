@@ -557,4 +557,8 @@ VantageEngine.Renderers.DuelPracticeRenderer = class DuelPracticeRenderer extend
     if (totalShots === 0) return 0;
     return hits / totalShots;
   }
+
+  isScenarioComplete() {
+    return !this.running && (this._allEnemiesSpawned || this._ammoRemaining <= 0);
+  }
 };
