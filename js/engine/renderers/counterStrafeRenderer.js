@@ -1,22 +1,44 @@
 /* ============================================
    Counter Strafe Renderer — 3D
-   Extends ThreeArenaRenderer. Player moves left/right
-   with A/D. Shots while moving have large spread penalty.
-   After stopping (counter-strafing), accuracy returns
-   after a brief settling period.
+   Extends ThreeArenaRenderer. Player physically strafes
+   left/right with A/D using real velocity-based physics.
+   Counter-strafing (pressing opposite direction) decelerates
+   and reverses movement. Shots while moving have spread
+   penalty proportional to velocity. Accuracy recovers only
+   after the player has physically decelerated to a stop.
    ============================================ */
 VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer extends VantageEngine.Renderers.ThreeArenaRenderer {
+
+  // ─── Movement Physics Constants ──────────────────────
+  static MOVE_MAX_SPEED    = 5.5;   // units/sec lateral strafe speed
+  static MOVE_ACCEL        = 45.0;  // units/sec² acceleration when key held
+  static MOVE_DECEL        = 35.0;  // units/sec² natural deceleration (no key)
+  static MOVE_COUNTER_DECEL = 70.0; // units/sec² counter-strafe deceleration (opposite key)
+  static MOVE_STOP_THRESHOLD = 0.15; // below this velocity = "stopped"
+  static MOVE_BOUNDARY     = 12.0;  // max lateral offset from arena center
+  static CAMERA_BASE_Y     = 1.7;   // eye height
+  static MOVE_BOB_AMOUNT   = 0.018; // subtle vertical bob while moving
+  static MOVE_BOB_SPEED    = 10.0;  // bob oscillation frequency
 
   constructor(canvas, scenario, config) {
     super(canvas, scenario, config);
 
+    // ─── Movement state ────────────────────────────────
+    this._playerVelX = 0;       // signed lateral velocity (positive = right)
+    this._playerOffsetX = 0;    // signed lateral world offset from center
+    this._playerOffsetZ = 0;    // signed forward/back offset (usually 0)
+    this._moveBobPhase = 0;     // phase accumulator for camera bob
+
+    // ─── Key tracking ──────────────────────────────────
+    this._keysDown = {};
+
+    // ─── Legacy state labels (now derived from velocity) ─
     this._moveState = 'stopped';
     this._moveDirection = 0;
     this._settlingUntil = 0;
     this._settlingDuration = 150;
 
-    this._keysDown = {};
-
+    // ─── Shot statistics ───────────────────────────────
     this._shotsFired = 0;
     this._shotsWhileMoving = 0;
     this._shotsWhileStopped = 0;
@@ -26,15 +48,19 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     this._lastStopTime = 0;
     this._counterStrafeWindow = 500;
 
+    // ─── Spread tuning ─────────────────────────────────
     this._movingSpreadDeg = 4.5;
     this._settlingSpreadDeg = 2.0;
     this._stoppedSpreadDeg = 0;
 
+    // ─── Crosshair indicator ───────────────────────────
     this._crosshairEl = null;
 
+    // ─── Bound key handlers ────────────────────────────
     this._onKeyDown = this._handleKeyDown.bind(this);
     this._onKeyUp = this._handleKeyUp.bind(this);
 
+    // ─── Time limit from difficulty ────────────────────
     var S = VantageEngine.Settings;
     var diffSetting = S.getDifficulty(config.difficulty || 'medium');
     var diffId = diffSetting ? diffSetting.id : 'medium';
@@ -63,6 +89,14 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     this._settlingUntil = 0;
     this._keysDown = {};
     this._lastStopTime = 0;
+
+    // Reset movement physics
+    this._playerVelX = 0;
+    this._playerOffsetX = 0;
+    this._playerOffsetZ = 0;
+    this._moveBobPhase = 0;
+    this._resetCameraPosition();
+
     document.addEventListener('keydown', this._onKeyDown);
     document.addEventListener('keyup', this._onKeyUp);
     this._spawnTarget();
@@ -70,6 +104,9 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
   }
 
   pause() {
+    // Clear movement input so resuming doesn't carry stale key states
+    this._keysDown = {};
+    this._playerVelX = 0;
     VantageEngine.Renderers.ThreeArenaRenderer.prototype.pause.call(this);
   }
 
@@ -81,16 +118,27 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     document.removeEventListener('keydown', this._onKeyDown);
     document.removeEventListener('keyup', this._onKeyUp);
     this._removeCrosshairIndicator();
-    VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
     this._keysDown = {};
+    // Reset camera to origin before base class teardown
+    this._resetCameraPosition();
+    VantageEngine.Renderers.ThreeArenaRenderer.prototype.stop.call(this);
   }
+
+  // ─── Camera Position Management ────────────────────────
+
+  _resetCameraPosition() {
+    if (this._camera) {
+      this._camera.position.set(0, this.constructor.CAMERA_BASE_Y, 0);
+    }
+  }
+
+  // ─── Key Handlers ──────────────────────────────────────
 
   _handleKeyDown(ev) {
     if (this._paused || this._stopped || !this.running) return;
     var key = ev.key.toLowerCase();
     if (key === 'a' || key === 'd') {
       this._keysDown[key] = true;
-      this._updateMoveState();
     }
   }
 
@@ -99,49 +147,161 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     var key = ev.key.toLowerCase();
     if (key === 'a' || key === 'd') {
       this._keysDown[key] = false;
-      this._updateMoveState();
     }
   }
 
-  _updateMoveState() {
+  // ─── Movement Physics ──────────────────────────────────
+  // Called every frame from _update(). Computes desired input direction,
+  // applies acceleration / deceleration / counter-strafe, integrates velocity
+  // into position, clamps to arena bounds, and updates the camera.
+
+  _updateMovement(dt) {
+    var C = this.constructor;
     var left = !!this._keysDown['a'];
     var right = !!this._keysDown['d'];
-    var now = Date.now();
 
-    if (left && right) {
+    // Determine input direction: -1 (left), +1 (right), 0 (none/both)
+    var inputDir = 0;
+    if (left && !right) inputDir = -1;
+    else if (right && !left) inputDir = 1;
+
+    var vel = this._playerVelX;
+    var prevVel = vel;
+
+    if (inputDir !== 0) {
+      // Key is held — accelerate toward input direction
+      if (vel * inputDir >= 0) {
+        // Same direction as current velocity (or stationary): normal acceleration
+        vel += inputDir * C.MOVE_ACCEL * dt;
+      } else {
+        // Opposite direction to current velocity: counter-strafe deceleration
+        vel += inputDir * C.MOVE_COUNTER_DECEL * dt;
+        // Clamp: don't overshoot past zero in the same frame
+        if (vel * inputDir > 0) {
+          // We crossed zero — check if we should continue accelerating
+          // The counter-strafe brought us through zero, now accelerate in new direction
+          // This is correct behavior: the new direction key is still held
+        }
+      }
+      // Clamp to max speed
+      vel = Math.max(-C.MOVE_MAX_SPEED, Math.min(C.MOVE_MAX_SPEED, vel));
+    } else {
+      // No key held — decelerate naturally
+      if (vel > 0) {
+        vel = Math.max(0, vel - C.MOVE_DECEL * dt);
+      } else if (vel < 0) {
+        vel = Math.min(0, vel + C.MOVE_DECEL * dt);
+      }
+    }
+
+    this._playerVelX = vel;
+
+    // Detect when the player has just stopped (velocity crossed below threshold)
+    var now = Date.now();
+    var absVel = Math.abs(vel);
+    var wasMoving = Math.abs(prevVel) > C.MOVE_STOP_THRESHOLD;
+    var isNowStopped = absVel <= C.MOVE_STOP_THRESHOLD;
+
+    if (wasMoving && isNowStopped) {
+      this._lastStopTime = now;
+      this._settlingUntil = now + this._settlingDuration;
+    }
+
+    // Integrate position: move along camera's right vector (projected to XZ)
+    if (this._camera && absVel > 0.001) {
+      var yaw = this._yaw;
+      // Camera right vector in XZ plane: (cos(yaw), 0, -sin(yaw))
+      var rightX = Math.cos(yaw);
+      var rightZ = -Math.sin(yaw);
+
+      this._playerOffsetX += rightX * vel * dt;
+      this._playerOffsetZ += rightZ * vel * dt;
+    }
+
+    // Clamp to arena boundary
+    var maxOffset = C.MOVE_BOUNDARY;
+    var dist = Math.sqrt(this._playerOffsetX * this._playerOffsetX + this._playerOffsetZ * this._playerOffsetZ);
+    if (dist > maxOffset) {
+      var scale = maxOffset / dist;
+      this._playerOffsetX *= scale;
+      this._playerOffsetZ *= scale;
+      // Kill velocity component pointing outward
+      if (this._camera) {
+        var yaw2 = this._yaw;
+        var rx = Math.cos(yaw2);
+        var rz = -Math.sin(yaw2);
+        var dot = rx * this._playerOffsetX + rz * this._playerOffsetZ;
+        if (dot > 0 && vel > 0) this._playerVelX = 0;
+        else if (dot < 0 && vel < 0) this._playerVelX = 0;
+      }
+    }
+
+    // Update camera position
+    if (this._camera) {
+      this._camera.position.x = this._playerOffsetX;
+      this._camera.position.z = this._playerOffsetZ;
+
+      // Subtle vertical bob while moving (grounded feel)
+      if (absVel > C.MOVE_STOP_THRESHOLD) {
+        this._moveBobPhase += dt * C.MOVE_BOB_SPEED * (absVel / C.MOVE_MAX_SPEED + 0.5);
+        var bobY = Math.sin(this._moveBobPhase) * C.MOVE_BOB_AMOUNT * (absVel / C.MOVE_MAX_SPEED);
+        this._camera.position.y = C.CAMERA_BASE_Y + bobY;
+      } else {
+        // Smoothly return to base height
+        this._camera.position.y += (C.CAMERA_BASE_Y - this._camera.position.y) * Math.min(1, dt * 12);
+        this._moveBobPhase = 0;
+      }
+    }
+
+    // Update legacy state labels (derived from velocity for backward compatibility)
+    this._updateMoveStateFromVelocity(now);
+  }
+
+  _updateMoveStateFromVelocity(now) {
+    var absVel = Math.abs(this._playerVelX);
+    var C = this.constructor;
+
+    if (absVel > C.MOVE_STOP_THRESHOLD) {
+      this._moveState = 'moving';
+      this._moveDirection = this._playerVelX > 0 ? 1 : -1;
+    } else if (now < this._settlingUntil) {
       this._moveState = 'stopped';
       this._moveDirection = 0;
-      this._settlingUntil = now + this._settlingDuration;
-      this._lastStopTime = now;
-    } else if (left) {
-      this._moveState = 'moving';
-      this._moveDirection = -1;
-    } else if (right) {
-      this._moveState = 'moving';
-      this._moveDirection = 1;
     } else {
-      if (this._moveState === 'moving') {
-        this._settlingUntil = now + this._settlingDuration;
-        this._lastStopTime = now;
-      }
       this._moveState = 'stopped';
       this._moveDirection = 0;
     }
   }
 
+  // ─── Spread & State (velocity-based) ───────────────────
+
   _getCurrentSpread() {
-    var now = Date.now();
-    if (this._moveState === 'moving') return this._movingSpreadDeg;
-    if (now < this._settlingUntil) return this._settlingSpreadDeg;
-    return this._stoppedSpreadDeg;
+    var absVel = Math.abs(this._playerVelX);
+    var C = this.constructor;
+
+    if (absVel <= C.MOVE_STOP_THRESHOLD) {
+      // Check settling period
+      var now = Date.now();
+      if (now < this._settlingUntil) return this._settlingSpreadDeg;
+      return this._stoppedSpreadDeg;
+    }
+
+    // Interpolate spread linearly from settling to max based on velocity fraction
+    var velFraction = Math.min(1, absVel / C.MOVE_MAX_SPEED);
+    return this._settlingSpreadDeg + (this._movingSpreadDeg - this._settlingSpreadDeg) * velFraction;
   }
 
   _getEffectiveMoveState() {
+    var absVel = Math.abs(this._playerVelX);
+    var C = this.constructor;
     var now = Date.now();
-    if (this._moveState === 'moving') return 'moving';
+
+    if (absVel > C.MOVE_STOP_THRESHOLD) return 'moving';
     if (now < this._settlingUntil) return 'settling';
     return 'stopped';
   }
+
+  // ─── Crosshair Indicator ───────────────────────────────
 
   _createCrosshairIndicator() {
     if (!this.canvas || !this.canvas.parentElement) return;
@@ -190,6 +350,8 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
       this._crosshairEl.style.textShadow = '0 0 6px rgba(0,255,136,0.5)';
     }
   }
+
+  // ─── Target Spawning ───────────────────────────────────
 
   _generateTargetPosition() {
     var distance = 6 + Math.random() * 12;
@@ -269,6 +431,8 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
       spawnPos: { x: pos.x, y: pos.y, z: pos.z },
     });
   }
+
+  // ─── Shooting ──────────────────────────────────────────
 
   _tryFire() {
     if (!this.running || this._paused || this._stopped) return;
@@ -362,10 +526,15 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
     if (!hit && this._onMiss) this._onMiss();
   }
 
+  // ─── Per-Frame Update ──────────────────────────────────
+
   _update() {
     if (!this._clock) return;
     var dt = Math.min(this._clock.getDelta(), 0.1);
     var now = Date.now();
+
+    // Update player movement physics (moves the camera in 3D space)
+    this._updateMovement(dt);
 
     this._updateParticles(dt);
     this._updateWeapon(dt);
@@ -440,6 +609,8 @@ VantageEngine.Renderers.CounterStrafeRenderer = class CounterStrafeRenderer exte
       this._disposeTarget(toRemove[j]);
     }
   }
+
+  // ─── Stats & Progression ───────────────────────────────
 
   getCounterStrafeStats() {
     var accuracyMoving = this._shotsWhileMoving > 0
